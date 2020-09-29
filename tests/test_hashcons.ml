@@ -30,6 +30,34 @@ and term =
                      }]
 ;;
 
+module XX = struct
+let preeq_option f x y = match (x,y) with
+    (None, None) -> true
+  | (Some x, Some y) -> f x y
+  | _ -> false
+let prehash_option f x = match x with
+    None -> 0
+  | Some x -> f x
+let hash_option = prehash_option
+
+type term_option = term option
+and term =
+    Ref of int
+  | Abs of term
+  | App of term * term
+  | Foo of term_option
+[@@hashcons_module Term][@@hashcons_constructor term]
+[@@deriving hashcons { module_name = LAM2
+                     ; memo = {
+                         memo_term = [%typ: term]
+                       ; memo_int_term = [%typ: int * term]
+                       ; memo_int = [%typ: int]
+                       }
+                     }]
+end
+;;
+
+
 type variable = int (* 1..max_var *) ;;
 let preeq_variable x y = x = y ;;
 let prehash_variable x = Hashtbl.hash x ;;
