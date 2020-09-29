@@ -35,14 +35,6 @@ lamh.opt: test_hashcons.cmx lamh.cmx
 	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
-lamhok.byte: test_hashcons.cmo lamhok.cmo
-	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
-	-linkpkg -syntax camlp5o $^ -o $@
-
-lamhok.opt: test_hashcons.cmx lamhok.cmx
-	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
-	-linkpkg -syntax camlp5o $^ -o $@
-
 clean::
 	rm -f  *.ppo.*
 
