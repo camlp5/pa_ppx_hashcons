@@ -18,7 +18,7 @@ SYNTAX := camlp5o
 OCAMLCFLAGS += -ppopt -pa_passthru-debug 
 
 TESTS= \
-	lamh.byte lamh.opt \
+	test_hashcons.byte lamh.byte lamh.opt \
 
 all: $(TESTS)
 
@@ -27,11 +27,15 @@ test: $(TESTS:.byte=)
 % : %.opt
 	mkdir -p _build && ./$<
 
-lamh.byte: test_hashcons.cmo lamh.cmo
+lamh.byte: lamh.cmo
 	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
-lamh.opt: test_hashcons.cmx lamh.cmx
+test_hashcons.byte: test_hashcons.cmo
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
+lamh.opt: lamh.cmx
 	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 

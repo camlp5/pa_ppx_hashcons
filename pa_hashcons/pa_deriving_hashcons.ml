@@ -96,10 +96,56 @@ value build_context loc ctxt tdl =
   }
 ;
 
-value generate_eq_expression loc ctxt rc ty =
+value strip_hashcons_attributes td =
+  { (td) with
+    tdAttributes =
+      vala_map (Std.filter (fun a ->
+          not (List.mem (a |> uv |> fst |> uv |> snd)
+            ["hashcons_module"; "hashcons_constructor"; "deriving"])))
+        td.tdAttributes }
+;
+
+value hashcons_module_name (name, td) =
+  match List.find_map (fun a ->
+      match uv a with [
+        <:attribute_body< hashcons_module $uid:mname$ ; >> -> Some mname
+      | _ -> None
+      ]) (uv td.tdAttributes) with [
+    Some n -> n
+  | None -> "HC_"^name
+  ]
+;
+
+value hashcons_constructor_name (name, td) =
+  match List.find_map (fun a ->
+      match uv a with [
+        <:attribute_body< hashcons_constructor $lid:cname$ ; >> -> Some cname
+      | _ -> None
+      ]) (uv td.tdAttributes) with [
+    Some n -> n
+  | None -> "make_"^name
+  ]
+;
+
+value generate_eq_expression loc eq_prefix ctxt rc rho ty =
   let rec prerec = fun [
-    <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
-    <:expr< (fun (x : $z$)  (y : $z$) -> x == y) >>
+    <:ctyp< $_$ == $t$ >> -> prerec t
+  | <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
+    let eq_name = eq_prefix^"_"^lid in
+    <:expr< $lid:eq_name$ >>
+
+  | z when List.mem (canon_ctyp z) builtin_types ->
+    <:expr< (fun (x : $z$) (y : $z$) -> x = y) >>
+
+  | <:ctyp:< $lid:lid$ >> ->
+    let eq_name = eq_prefix^"_"^lid in
+    <:expr< $lid:eq_name$ >>
+
+  | <:ctyp:< $_$ $_$ >> as z ->
+    let (ty, args) = Ctyp.unapplist z in
+    Expr.applist <:expr< $prerec ty$ >> (List.map prerec args)
+  | <:ctyp< ' $id$ >> when List.mem_assoc id rho ->
+    <:expr< $lid:List.assoc id rho$ >>
   | <:ctyp:< ( $list:l$ ) >> ->
     let xpatt_ypatt_subeqs =
       List.mapi (fun i ty ->
@@ -154,31 +200,91 @@ value generate_eq_expression loc ctxt rc ty =
     ] in
     <:expr< (fun x y -> match (x,y) with [ $list:case_branches$ ] ) >>
 
-  | z when List.mem (canon_ctyp z) builtin_types ->
-    <:expr< (fun (x : $z$) (y : $z$) -> x = y) >>
-
-  | <:ctyp:< $lid:lid$ >> ->
-    let eq_name = "preeq_"^lid in
-    <:expr< $lid:eq_name$ >>
-
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_eq_binding:@ unhandled type %a"
+  | z -> Ploc.raise loc (Failure Fmt.(str "generate_eq_expression:@ unhandled type %a"
                                         Pp_MLast.pp_ctyp z))
 
   ] in
   prerec ty
 ;
 
-value generate_pre_eq_binding ctxt rc (name, td) =
-  let loc = loc_of_type_decl td in
-  let rhs = generate_eq_expression loc ctxt rc td.tdDef in
-  let eq_fname = "preeq_"^name^"_node" in
-  (<:patt< $lid:eq_fname$ >>, rhs, <:vala< [] >>)
+value make_rho loc name td =
+  let tyvars = td.tdPrm |> uv in
+  List.mapi (fun i -> fun [
+      (<:vala< None >>, _) ->
+      Ploc.raise loc (Failure Fmt.(str "make_rho: %s: formal type-vars must all be named"
+                                     name))
+    | (<:vala< Some id >>, _) -> (id, Printf.sprintf "sub_%d" i)
+    ]) tyvars
 ;
 
-value generate_hash_expression loc ctxt rc ty =
+value abstract_function_body loc typemaker rho fbody =
+  let args = List.map (fun (id, fname) ->
+    let argty = typemaker <:ctyp< $lid:id$ >> in
+    <:patt< ( $lid:fname$ : $argty$)>>) rho in
+  let typeargs = List.map (fun (id, _) ->
+      <:patt< (type $lid:id$) >>) rho in
+  Expr.abstract_over (typeargs@args) fbody
+;
+
+value create_function_type loc typemaker rho name =
+  if rho = [] then
+    typemaker <:ctyp< $lid:name$ >>
+  else
+    let typevars = List.map (fun (id, _) -> <:ctyp< ' $id$ >>) rho in
+    let thety = Ctyp.applist <:ctyp< $lid:name$ >> typevars in
+    let argtypes = List.map typemaker typevars in
+    let rhsty = Ctyp.arrows_list loc argtypes (typemaker thety) in
+    <:ctyp< ! $list:List.map fst rho$ . $rhsty$ >>
+;
+
+value generate_preeq_bindings ctxt rc (name, td) =
+  let loc = loc_of_type_decl td in
+  let name = td.tdNam |> uv |> snd |> uv in
+  let node_type_name = name^"_node" in
+  let rho = make_rho loc name td in
+  let body = generate_eq_expression loc "preeq" ctxt rc rho td.tdDef in
+  let body = match body with [
+    <:expr< fun [ $list:_$ ] >> -> body
+  | _ -> <:expr< fun x y -> $body$ x y >>
+  ] in
+  let make_type cty = <:ctyp< $cty$ -> $cty$ -> bool >> in
+  let fbody = abstract_function_body loc make_type rho body in
+  let ftype = create_function_type loc make_type rho node_type_name in
+  let node_eq_fname = "preeq_"^node_type_name in
+  let node_binding = (<:patt< ( $lid:node_eq_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
+  let it_binding =
+    let body =
+      if rho <> [] then
+        let fexp = Expr.applist <:expr< $lid:node_eq_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
+        <:expr< fun x y -> $fexp$ x y >>
+      else
+        <:expr< fun x y -> x == y >> in
+    let fbody = abstract_function_body loc make_type rho body in
+    let ftype = create_function_type loc make_type rho name in
+    let eq_fname = "preeq_"^name in
+    (<:patt< ( $lid:eq_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
+  [node_binding ; it_binding]
+;
+
+value generate_hash_expression loc hash_prefix ctxt rc rho ty =
   let rec prerec = fun [
-    <:ctyp:< $lid:lid$ >> when List.mem_assoc lid rc.type_decls ->
-    <:expr< (fun x -> x.hkey) >>
+    <:ctyp< $_$ == $t$ >> -> prerec t
+  | <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
+    let hash_name = hash_prefix^"_"^lid in
+    <:expr< $lid:hash_name$ >>
+
+  | z when List.mem (canon_ctyp z) builtin_types ->
+    <:expr< (fun (x : $z$) -> Hashtbl.hash x) >>
+
+  | <:ctyp:< $lid:lid$ >> ->
+    let hash_name = hash_prefix^"_"^lid in
+    <:expr< $lid:hash_name$ >>
+
+  | <:ctyp:< $_$ $_$ >> as z ->
+    let (ty, args) = Ctyp.unapplist z in
+    Expr.applist <:expr< $prerec ty$ >> (List.map prerec args)
+  | <:ctyp< ' $id$ >> when List.mem_assoc id rho ->
+    <:expr< $lid:List.assoc id rho$ >>
   | <:ctyp:< ( $list:l$ ) >> ->
     let xpatt_subhashs =
       List.mapi (fun i ty ->
@@ -218,36 +324,72 @@ value generate_hash_expression loc ctxt rc ty =
         ]) l in
     <:expr< fun [ $list:case_branches$ ] >>
 
-  | z when List.mem (canon_ctyp z) builtin_types ->
-    <:expr< (fun x -> Hashtbl.hash x) >>
-
-  | <:ctyp:< $lid:lid$ >> ->
-    let eq_name = "prehash_"^lid in
-    <:expr< $lid:eq_name$ >>
-
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_hash_binding:@ unhandled type %a"
+  | z -> Ploc.raise loc (Failure Fmt.(str "generate_hash_expression:@ unhandled type %a"
                                         Pp_MLast.pp_ctyp z))
 
   ] in
   prerec ty
 ;
 
-value generate_pre_hash_binding ctxt rc (name, td) =
+value generate_prehash_bindings ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
-  let rhs = generate_hash_expression loc ctxt rc td.tdDef in
-  let hash_fname = "prehash_"^name^"_node" in
-  (<:patt< $lid:hash_fname$ >>, rhs, <:vala< [] >>)
+  let name = td.tdNam |> uv |> snd |> uv in
+  let node_type_name = name^"_node" in
+  let rho = make_rho loc name td in
+  let body = generate_hash_expression loc "prehash" ctxt rc rho td.tdDef in
+  let body = match body with [
+    <:expr< fun [ $list:_$ ] >> -> body
+  | _ -> <:expr< fun x -> $body$ x >>
+  ] in
+  let make_type cty = <:ctyp< $cty$ -> int >> in
+  let fbody = abstract_function_body loc make_type rho body in
+  let ftype = create_function_type loc make_type rho node_type_name in
+  let node_hash_fname = "prehash_"^node_type_name in
+  let node_binding = (<:patt< ( $lid:node_hash_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
+  let it_binding =
+    let body =
+      if rho <> [] then
+        let fexp = Expr.applist <:expr< $lid:node_hash_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
+        <:expr< fun x -> $fexp$ x >>
+      else
+        <:expr< fun x -> x.hkey >> in
+    let fbody = abstract_function_body loc make_type rho body in
+    let ftype = create_function_type loc make_type rho name in
+    let hash_fname = "prehash_"^name in
+    (<:patt< ( $lid:hash_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
+  [node_binding ; it_binding]
+
 ;
 
 value generate_hash_bindings ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
-  let node_rhs = generate_hash_expression loc ctxt rc td.tdDef in
-  let node_hash_fname = "hash_"^name^"_node" in
+  let rho = make_rho loc name td in
+  let node_rhs = generate_hash_expression loc "hash" ctxt rc rho td.tdDef in
+  let node_rhs = match node_rhs with [
+    <:expr< fun [ $list:_$ ] >> -> node_rhs
+  | _ -> <:expr< fun x -> $node_rhs$ x >>
+  ] in
+  let node_type_name = name^"_node" in
+  let node_hash_fname = "hash_"^node_type_name in
+  let make_type cty = <:ctyp< $cty$ -> int >> in
+  let node_rhs = abstract_function_body loc make_type rho node_rhs in
+  let node_ftype = create_function_type loc make_type rho node_type_name in
 
-  let hc_rhs = <:expr< (fun (x : $lid:name$) -> x.hkey) >> in
-  let hc_fname = "hash_"^name in
-  [(<:patt< $lid:node_hash_fname$ >>, node_rhs, <:vala< [] >>)
-  ; (<:patt< $lid:hc_fname$ >>, hc_rhs, <:vala< [] >>)]
+  let node_binding = (<:patt< ( $lid:node_hash_fname$ : $node_ftype$ ) >>, node_rhs, <:vala< [] >>) in
+
+  let it_binding =
+    let body =
+      if rho <> [] then
+        let fexp = Expr.applist <:expr< $lid:node_hash_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
+        <:expr< fun x -> $fexp$ x >>
+      else
+        <:expr< fun x -> x.hkey >> in
+    let fbody = abstract_function_body loc make_type rho body in
+    let ftype = create_function_type loc make_type rho name in
+    let hash_fname = "hash_"^name in
+    (<:patt< ( $lid:hash_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
+
+  [node_binding; it_binding]
 ;
 
 value ctyp_make_tuple loc l =
@@ -322,8 +464,8 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
       declare
         module $mname$ = Hashtbl.Make(struct
           type t = $z$ ;
-          value equal = $generate_eq_expression loc ctxt rc z$ ;
-          value hash = $generate_hash_expression loc ctxt rc z$ ;
+          value equal = $generate_eq_expression loc "eq" ctxt rc [] z$ ;
+          value hash = $generate_hash_expression loc "hash" ctxt rc [] z$ ;
         end) ;
       value $lid:memo_fname$ f ht =
         $fun_body$
@@ -337,8 +479,8 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
       declare
         module $mname$ = Ephemeron.K1.Make(struct
           type t = $z$ ;
-          value equal = $generate_eq_expression loc ctxt rc z$ ;
-          value hash = $generate_hash_expression loc ctxt rc z$ ;
+          value equal = $generate_eq_expression loc "preeq" ctxt rc [] z$ ;
+          value hash = $generate_hash_expression loc "prehash" ctxt rc [] z$ ;
         end) ;
       value $lid:memo_fname$ f =
         let ht = $uid:mname$.create 251 in
@@ -360,13 +502,13 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
         module $mname$ = Ephemeron.K2.Make
           (struct
             type t = $z0$ ;
-            value equal = $generate_eq_expression loc ctxt rc z0$ ;
-            value hash = $generate_hash_expression loc ctxt rc z0$ ;
+            value equal = $generate_eq_expression loc "preeq" ctxt rc [] z0$ ;
+            value hash = $generate_hash_expression loc "prehash" ctxt rc [] z0$ ;
            end)
           (struct
             type t = $z1$ ;
-            value equal = $generate_eq_expression loc ctxt rc z1$ ;
-            value hash = $generate_hash_expression loc ctxt rc z1$ ;
+            value equal = $generate_eq_expression loc "preeq" ctxt rc [] z1$ ;
+            value hash = $generate_hash_expression loc "prehash" ctxt rc [] z1$ ;
            end) ;
       value $lid:memo_fname$ f =
         let ht = $uid:mname$.create 251 in
@@ -389,15 +531,11 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
         let hc_memo_name = find_matching_memo loc rc (List.map snd hc_args) in
         let prim_tupletype = ctyp_make_tuple loc (List.map to_ctyp prim_args) in
         let prim_memo_name = find_matching_memo loc rc [(False, prim_tupletype)] in
-        let hc_mname = "HT_"^hc_memo_name in
         let prim_mname = "HT_"^prim_memo_name in
 
         let hc_function_expr =
           Expr.abstract_over (List.map (to_typatt loc) hc_args)
             <:expr< $uid:prim_mname$.create 251 >> in
-
-        let hc_function_call =
-          Expr.applist <:expr< hc_f >> (List.map (to_expr loc) hc_args) in
 
         let f_call = Expr.applist <:expr< f >> (List.map (to_expr loc) vars_types) in
         let prim_function_expr =
@@ -468,43 +606,23 @@ value separate_bindings l =
   (List.rev ml, List.rev vl)
 ;
 
-value hashcons_module_name (name, td) =
-  match List.find_map (fun a ->
-      match uv a with [
-        <:attribute_body< hashcons_module $uid:mname$ ; >> -> Some mname
-      | _ -> None
-      ]) (uv td.tdAttributes) with [
-    Some n -> n
-  | None -> "HC_"^name
-  ]
-;
-
-value hashcons_constructor_name (name, td) =
-  match List.find_map (fun a ->
-      match uv a with [
-        <:attribute_body< hashcons_constructor $lid:cname$ ; >> -> Some cname
-      | _ -> None
-      ]) (uv td.tdAttributes) with [
-    Some n -> n
-  | None -> "make_"^name
-  ]
-;
-
 value generate_hashcons_module ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
+  if [] <> uv td.tdPrm then <:str_item< declare end >> else
   let modname = hashcons_module_name (name, td) in
   let node_name = name^"_node" in
-  let pre_eq_name = "preeq_"^name^"_node" in
-  let pre_hash_name = "prehash_"^name^"_node" in
+  let preeq_name = "preeq_"^name^"_node" in
+  let prehash_name = "prehash_"^name^"_node" in
   <:str_item< module $uid:modname$ = Hashcons.Make(struct
               type t = $lid:node_name$ ;
-              value equal = $lid:pre_eq_name$ ;
-              value hash = $lid:pre_hash_name$ ;
+              value equal = $lid:preeq_name$ ;
+              value hash = $lid:prehash_name$ ;
               end) >>
 ;
 
 value generate_hashcons_constructor ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
+  if [] <> uv td.tdPrm then <:str_item< declare end >> else
   let modname = hashcons_module_name (name, td) in
   let consname = hashcons_constructor_name (name, td) in
   let htname = name^"_ht" in
@@ -531,7 +649,10 @@ value hashconsed_type_decl ctxt td =
       ]) tyvars in
   let hc_tdDef =
     let data_type = <:ctyp< $lid:data_name$ >> in
-    <:ctyp< hash_consed $Ctyp.applist data_type tyargs$ >> in
+    if uv td.tdPrm <> [] then
+      Ctyp.applist data_type tyargs
+    else
+      <:ctyp< hash_consed $Ctyp.applist data_type tyargs$ >> in
   [ { (td) with tdNam =
                 let n = <:vala< data_name >> in
                 <:vala< (loc, n) >> }
@@ -551,8 +672,9 @@ value str_item_gen_hashcons name arg = fun [
                      tag : int;
                      node : 'a } >> 
       ] in
-    let pre_eq_bindings = List.map (HC.generate_pre_eq_binding arg rc) rc.HC.type_decls in
-    let pre_hash_bindings = List.map (HC.generate_pre_hash_binding arg rc) rc.HC.type_decls in
+    let new_tdl = List.map HC.strip_hashcons_attributes new_tdl in
+    let preeq_bindings = List.concat (List.map (HC.generate_preeq_bindings arg rc) rc.HC.type_decls) in
+    let prehash_bindings = List.concat (List.map (HC.generate_prehash_bindings arg rc) rc.HC.type_decls) in
     let hashcons_modules = List.map (HC.generate_hashcons_module arg rc) rc.HC.type_decls in
     let hash_bindings = List.concat (List.map (HC.generate_hash_bindings arg rc) rc.HC.type_decls) in
     let hashcons_constructors = List.map (HC.generate_hashcons_constructor arg rc) rc.HC.type_decls in
@@ -563,10 +685,10 @@ value str_item_gen_hashcons name arg = fun [
     <:str_item< module $uid:rc.module_name$ = struct
                 open Hashcons ;
                 type $list:new_tdl$ ;
-                value $list:pre_eq_bindings$ ;
-                value $list:pre_hash_bindings$ ;
+                value rec $list:preeq_bindings$ ;
+                value rec $list:prehash_bindings$ ;
                 declare $list:hashcons_modules @ hashcons_constructors$ end ;
-                value $list:hash_bindings$ ;
+                value rec $list:hash_bindings$ ;
                 declare $list:module_items$ end ;
                 value rec $list:bindings$ ;
                   end >>

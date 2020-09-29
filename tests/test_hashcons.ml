@@ -1,10 +1,16 @@
 (* camlp5o *)
 (* test_hashcons.ml *)
 
-type term =
+type 'a id = 'a [@@hashcons_skip]
+and 'a option = 'a Option.t = None | Some of 'a
+and term_id = term id
+and term_option = term option
+and term =
     Ref of int
-  | Abs of term
-  | App of term * term[@@hashcons_module Term][@@hashcons_constructor term]
+  | Abs of term_id
+  | App of term * term
+  | Foo of term_option
+[@@hashcons_module Term][@@hashcons_constructor term]
 [@@deriving hashcons { module_name = LAM
                      ; memo = {
                          memo_term = [%typ: term]
@@ -27,6 +33,7 @@ type term =
 type variable = int (* 1..max_var *) ;;
 let preeq_variable x y = x = y ;;
 let prehash_variable x = Hashtbl.hash x ;;
+let hash_variable = prehash_variable
 
 type bdd = Zero | One | Node of variable * bdd (*low*) * bdd (*high*)
 [@@deriving hashcons { module_name = BDD
