@@ -12,10 +12,11 @@ LAUNCH=env TOP=$(TOP) $(TOP)/tools/LAUNCH
 OCAMLFIND=$(LAUNCH) ocamlfind
 NOT_OCAMLFIND=$(LAUNCH) not-ocamlfind
 MKCAMLP5=$(LAUNCH) mkcamlp5
-PACKAGES := $(PACKAGES),ounit2,fmt,pcre,rresult,compiler-libs.common,sexplib,uint,pa_ppx.utils
+PACKAGES := $(PACKAGES),ounit2,fmt,pcre,rresult,compiler-libs.common,sexplib,uint,pa_ppx.utils,pa_ppx.import
 PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons
 SYNTAX := camlp5o
 OCAMLCFLAGS += -ppopt -pa_passthru-debug 
+OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
 
 TESTS= \
 	test_hashcons.byte lamh.byte lamh.opt \

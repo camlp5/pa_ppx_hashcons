@@ -130,6 +130,11 @@ value hashcons_constructor_name (name, td) =
 value generate_eq_expression loc eq_prefix ctxt rc rho ty =
   let rec prerec = fun [
     <:ctyp< $_$ == $t$ >> -> prerec t
+
+  | <:ctyp< $longid:li$ . $lid:lid$ >> ->
+    let eq_name = eq_prefix^"_"^lid in
+    Expr.prepend_longident li <:expr< $lid:eq_name$ >>
+
   | <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
     let eq_name = eq_prefix^"_"^lid in
     <:expr< $lid:eq_name$ >>
@@ -269,6 +274,11 @@ value generate_preeq_bindings ctxt rc (name, td) =
 value generate_hash_expression loc hash_prefix ctxt rc rho ty =
   let rec prerec = fun [
     <:ctyp< $_$ == $t$ >> -> prerec t
+
+  | <:ctyp< $longid:li$ . $lid:lid$ >> ->
+    let hash_name = hash_prefix^"_"^lid in
+    Expr.prepend_longident li <:expr< $lid:hash_name$ >>
+
   | <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
     let hash_name = hash_prefix^"_"^lid in
     <:expr< $lid:hash_name$ >>
@@ -653,9 +663,15 @@ value hashconsed_type_decl ctxt td =
       Ctyp.applist data_type tyargs
     else
       <:ctyp< hash_consed $Ctyp.applist data_type tyargs$ >> in
-  [ { (td) with tdNam =
-                let n = <:vala< data_name >> in
-                <:vala< (loc, n) >> }
+  [ { (td) with
+      tdNam =
+        let n = <:vala< data_name >> in
+        <:vala< (loc, n) >>
+      ; tdDef = match td.tdDef with [
+          <:ctyp< $_$ == $t$ >> -> t
+        | t -> t
+        ]
+    }
   ; <:type_decl< $lid:name$ $_list:td.tdPrm$ = $hc_tdDef$ >>
   ]
 ;
