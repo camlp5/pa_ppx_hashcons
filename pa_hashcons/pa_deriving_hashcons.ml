@@ -161,7 +161,7 @@ value generate_eq_expression loc ctxt rc ty =
     let eq_name = "preeq_"^lid in
     <:expr< $lid:eq_name$ >>
 
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_eq_binding: unhandled type %a"
+  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_eq_binding:@ unhandled type %a"
                                         Pp_MLast.pp_ctyp z))
 
   ] in
@@ -225,7 +225,7 @@ value generate_hash_expression loc ctxt rc ty =
     let eq_name = "prehash_"^lid in
     <:expr< $lid:eq_name$ >>
 
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_hash_binding: unhandled type %a"
+  | z -> Ploc.raise loc (Failure Fmt.(str "generate_pre_hash_binding:@ unhandled type %a"
                                         Pp_MLast.pp_ctyp z))
 
   ] in
