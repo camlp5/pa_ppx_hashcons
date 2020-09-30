@@ -36,10 +36,17 @@ value builtin_types =
 ;
 
 module HC = struct
+type external_funs_t = {
+  preeq : MLast.expr
+; prehash : MLast.expr
+}
+;
+
 type t = {
   module_name : string
 ; type_decls : list (string * MLast.type_decl)
 ; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
+; external_types : list (MLast.ctyp * external_funs_t)
 }
 ;
 
@@ -69,6 +76,38 @@ value extract_memo_type_list type_decls t =
   ]
 ;
 
+value extract_external_funs_t loc ctxt = fun [
+  <:expr:< { $list:lel$ } >> as z ->
+    let alist = List.map (fun [
+        (<:patt< $lid:lid$ >>, e) -> (lid, e)
+      | _ ->
+        Ploc.raise (loc_of_expr z)
+           (Failure Fmt.(str "extract_external_funs_t: keys of record-expression are not lidents:@ %a"
+                           Pp_MLast.pp_expr z))
+    ]) lel in
+    let preeq = match List.assoc "preeq" alist with [
+      x -> x
+    | exception Not_found -> 
+      Ploc.raise (loc_of_expr z)
+        (Failure Fmt.(str "extract_external_funs_t: missing preeq:@ %a"
+                        Pp_MLast.pp_expr z))
+    ] in
+    let prehash = match List.assoc "prehash" alist with [
+      x -> x
+    | exception Not_found -> 
+      Ploc.raise (loc_of_expr z)
+        (Failure Fmt.(str "extract_external_funs_t: missing prehash:@ %a"
+                        Pp_MLast.pp_expr z))
+    ] in
+    { preeq = preeq
+    ; prehash = prehash
+    }
+| e -> Ploc.raise (loc_of_expr e)
+           (Failure Fmt.(str "extract_external_funs_t: not a record-expression:@ %a"
+                           Pp_MLast.pp_expr e))
+]
+;
+
 value build_context loc ctxt tdl =
   let type_decls = List.map (fun (MLast.{tdNam=tdNam} as td) ->
       (tdNam |> uv |> snd |> uv, td)
@@ -89,10 +128,26 @@ value build_context loc ctxt tdl =
       ]) lel
   | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option memo requires a record argument")
   ] in
+  let external_types = match option ctxt "external_types" with [
+      <:expr:< { $list:lel$ } >> ->
+        List.map (fun (p, e) ->
+            let extfuns = extract_external_funs_t loc ctxt e in
+            let ty = match p with [
+              <:patt:< $lid:lid$ >> -> canon_ctyp <:ctyp< $lid:lid$ >>
+            | <:patt:< $longid:li$ . $lid:lid$ >> -> canon_ctyp <:ctyp< $longid:li$ . $lid:lid$ >>
+            | p -> Ploc.raise (loc_of_patt p)
+                (Failure Fmt.(str "pa_deriving_hashcons: key in external_types not a type:@ %a"
+                                Pp_MLast.pp_patt p))
+            ] in (ty, extfuns)
+          ) lel
+    | <:expr< () >> -> []
+    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option external_types")
+  ] in
   {
     module_name = module_name
   ; type_decls = type_decls
   ; memo = memo
+  ; external_types = external_types
   }
 ;
 
@@ -129,7 +184,11 @@ value hashcons_constructor_name (name, td) =
 
 value generate_eq_expression loc eq_prefix ctxt rc rho ty =
   let rec prerec = fun [
-    <:ctyp< $_$ == $t$ >> -> prerec t
+
+    t when List.mem_assoc (canon_ctyp t) rc.external_types ->
+    (List.assoc (canon_ctyp t) rc.external_types).preeq
+
+  | <:ctyp< $_$ == $t$ >> -> prerec t
 
   | <:ctyp< $longid:li$ . $lid:lid$ >> ->
     let eq_name = eq_prefix^"_"^lid in
@@ -273,7 +332,10 @@ value generate_preeq_bindings ctxt rc (name, td) =
 
 value generate_hash_expression loc hash_prefix ctxt rc rho ty =
   let rec prerec = fun [
-    <:ctyp< $_$ == $t$ >> -> prerec t
+    t when List.mem_assoc (canon_ctyp t) rc.external_types ->
+    (List.assoc (canon_ctyp t) rc.external_types).prehash
+
+  | <:ctyp< $_$ == $t$ >> -> prerec t
 
   | <:ctyp< $longid:li$ . $lid:lid$ >> ->
     let hash_name = hash_prefix^"_"^lid in
@@ -714,7 +776,7 @@ value str_item_gen_hashcons name arg = fun [
 Pa_deriving.(Registry.add PI.{
   name = "hashcons"
 ; alternates = []
-; options = ["optional"; "module_name"; "memo"]
+; options = ["optional"; "module_name"; "memo"; "external_types"]
 ; default_options = let loc = Ploc.dummy in [ ("optional", <:expr< False >>) ]
 ; alg_attributes = []
 ; expr_extensions = []

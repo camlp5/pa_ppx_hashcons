@@ -27,6 +27,7 @@ and term =
                        ; memo_term4_int2 = [%typ: term * int * term * term * int * term]
                        ; memo_term3_term = [%typ: ((term * term) * term) * term]
                        }
+                     ; external_types = ()
                      }]
 ;;
 
@@ -40,18 +41,29 @@ let hash_option = prehash_option
 
 module XX = struct
 
-type term_option = term option
-and term =
+type term =
     Ref of int
   | Abs of term
   | App of term * term
-  | Foo of term_option
+  | Foo of term Option.t
 [@@hashcons_module Term][@@hashcons_constructor term]
 [@@deriving hashcons { module_name = LAM2
                      ; memo = {
                          memo_term = [%typ: term]
                        ; memo_int_term = [%typ: int * term]
                        ; memo_int = [%typ: int]
+                       }
+                     ; external_types = {
+                         Option.t = {
+                           preeq = (fun f x y -> match (x,y) with
+                               (None, None) -> true
+                             | (Some x, Some y) -> f x y
+                             | _ -> false)
+                         ; prehash = (fun f x ->
+                             Hashtbl.hash (Option.map f x))
+                         ; hash = (fun f x ->
+                             Hashtbl.hash (Option.map f x))
+                         }
                        }
                      }]
 end
@@ -69,6 +81,7 @@ type bdd = Zero | One | Node of variable * bdd (*low*) * bdd (*high*)
                          memo_bdd = [%typ: bdd]
                        ; memo_bdd_bdd = [%typ: bdd * bdd]
                        }
+                     ; external_types = ()
                      }]
 ;;
 
@@ -80,23 +93,35 @@ let prehash_list f l =
   Hashtbl.hash (List.map f l)
 let hash_list = prehash_list
 
-module Ploc = struct
-include Ploc
-
-let prehash_t x = Hashtbl.hash x
-let hash_t = prehash_t
-let preeq_t x y = x = y
-end
-
 [%%import: MLast.expr
-    [@add [%%import: MLast.loc]]
-    [@add [%%import: MLast.type_var]]
-    [@add [%%import: 'a Ploc.vala]]
-    [@with Ploc.vala := vala]
+    [@with
+       loc := Ploc.t ;
+       type_var := MLast.type_var ;
+    ]
 ]
 [@@deriving hashcons { module_name = AST
                      ; memo = {
                          memo_expr = [%typ: expr]
+                       }
+                     ; external_types = {
+                         Ploc.t = {
+                           preeq = (fun x y -> x = y)
+                         ; prehash = (fun x -> Hashtbl.hash x)
+                         }
+                       ; Ploc.vala = {
+                           preeq = (fun f x y -> match (x,y) with
+                               (Ploc.VaAnt s1, Ploc.VaAnt s2) -> s1=s2
+                             | (Ploc.VaVal v1, Ploc.VaVal v2) -> f v1 v2
+                             )
+                         ; prehash = (fun f x -> match x with
+                             Ploc.VaAnt s -> Hashtbl.hash s
+                           | Ploc.VaVal v -> f v
+                           )
+                         }
+                       ; MLast.type_var = {
+                           preeq = (fun x y -> x = y)
+                         ; prehash = (fun x -> Hashtbl.hash x)
+                         }
                        }
                      }]
 ;;
