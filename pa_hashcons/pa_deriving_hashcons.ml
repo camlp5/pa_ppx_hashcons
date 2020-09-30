@@ -742,14 +742,7 @@ value str_item_gen_hashcons name arg = fun [
   <:str_item:< type $_flag:_$ $list:tdl$ >> ->
     let rc = HC.build_context loc arg tdl in
     let ll = List.map (hashconsed_type_decl arg) tdl in
-    let new_tdl =
-      let tdl = List.concat ll in
-      tdl @ [
-        <:type_decl< hash_consed +'a = Hashcons.hash_consed 'a == private {
-                     hkey : int;
-                     tag : int;
-                     node : 'a } >> 
-      ] in
+    let new_tdl = List.concat ll in
     let new_tdl = List.map HC.strip_hashcons_attributes new_tdl in
     let preeq_bindings = List.concat (List.map (HC.generate_preeq_bindings arg rc) rc.HC.type_decls) in
     let prehash_bindings = List.concat (List.map (HC.generate_prehash_bindings arg rc) rc.HC.type_decls) in
@@ -777,7 +770,10 @@ Pa_deriving.(Registry.add PI.{
   name = "hashcons"
 ; alternates = []
 ; options = ["optional"; "module_name"; "memo"; "external_types"]
-; default_options = let loc = Ploc.dummy in [ ("optional", <:expr< False >>) ]
+; default_options = let loc = Ploc.dummy in [
+    ("optional", <:expr< False >>)
+  ; ("external_types", <:expr< () >>)
+  ]
 ; alg_attributes = []
 ; expr_extensions = []
 ; ctyp_extensions = []

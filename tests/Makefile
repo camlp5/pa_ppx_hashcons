@@ -13,13 +13,14 @@ OCAMLFIND=$(LAUNCH) ocamlfind
 NOT_OCAMLFIND=$(LAUNCH) not-ocamlfind
 MKCAMLP5=$(LAUNCH) mkcamlp5
 PACKAGES := $(PACKAGES),ounit2,fmt,pcre,rresult,compiler-libs.common,sexplib,uint,pa_ppx.utils,pa_ppx.import
-PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons
+PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons,pa_ppx_migrate
 SYNTAX := camlp5o
 OCAMLCFLAGS += -ppopt -pa_passthru-debug 
 OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
+OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
 
 TESTS= \
-	test_hashcons.byte lamh.byte lamh.opt \
+	test_hashcons.byte lamh.byte lamh.opt test_inject.byte \
 
 all: $(TESTS)
 
@@ -32,11 +33,23 @@ lamh.byte: lamh.cmo
 	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
+lamh.opt: lamh.cmx
+	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
 test_hashcons.byte: test_hashcons.cmo
 	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
-lamh.opt: lamh.cmx
+test_hashcons.opt: test_hashcons.cmx
+	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
+test_inject.byte: lam.cmo lam_hashcons.cmo lam_migrate.cmo
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
+test_inject.opt: lam.cmx lam_hashcons.cmx lam_migrate.cmx
 	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
@@ -57,8 +70,8 @@ depend::
 
 .ml.cmo:
 	$(NOT_OCAMLFIND) preprocess $(OCAMLCFLAGS) -package $(PACKAGES),camlp5.pr_o -syntax $(SYNTAX) $< > $@.ppo.ml
-	$(OCAMLFIND) ocamlc $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $@.ppo.ml
-	$(OCAMLFIND) ocamlc $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $@.ppo.ml
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<
 
 .ml.cmx:
-	$(OCAMLFIND) ocamlopt $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<
+	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<

@@ -27,7 +27,6 @@ and term =
                        ; memo_term4_int2 = [%typ: term * int * term * term * int * term]
                        ; memo_term3_term = [%typ: ((term * term) * term) * term]
                        }
-                     ; external_types = ()
                      }]
 ;;
 
@@ -81,7 +80,6 @@ type bdd = Zero | One | Node of variable * bdd (*low*) * bdd (*high*)
                          memo_bdd = [%typ: bdd]
                        ; memo_bdd_bdd = [%typ: bdd * bdd]
                        }
-                     ; external_types = ()
                      }]
 ;;
 
