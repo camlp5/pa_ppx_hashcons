@@ -121,5 +121,11 @@ let hash_list = prehash_list
                          ; prehash = (fun x -> Hashtbl.hash x)
                          }
                        }
+                     ; skip_types = [
+                         longid_lident
+                       ; attribute
+                       ; attributes_no_anti
+                       ; attributes
+                       ]
                      }]
 ;;

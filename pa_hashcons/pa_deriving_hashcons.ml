@@ -35,6 +35,17 @@ value builtin_types =
   ]
 ;
 
+value convert_down_list_expr f e =
+  let rec crec acc = fun [
+    <:expr< [] >> -> List.rev acc
+  | <:expr< [ $h$ :: $tl$ ] >> ->
+    crec [ f h :: acc ] tl
+  | _ -> Ploc.raise (loc_of_expr e) (Failure Fmt.(str "convert_down_list_expr: malformed list-expression %a"
+                                                    Pp_MLast.pp_expr e))
+  ] in
+  crec [] e
+;
+
 module HC = struct
 type external_funs_t = {
   preeq : MLast.expr
@@ -47,6 +58,7 @@ type t = {
 ; type_decls : list (string * MLast.type_decl)
 ; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
 ; external_types : list (MLast.ctyp * external_funs_t)
+; skip_types : list string
 }
 ;
 
@@ -143,11 +155,21 @@ value build_context loc ctxt tdl =
     | <:expr< () >> -> []
     | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option external_types")
   ] in
+  let skip_types = match option ctxt "skip_types" with [
+      <:expr:< [ $_$ :: $_$ ] >> | <:expr:< [] >> as z ->
+      convert_down_list_expr (fun [ <:expr< $lid:lid$ >> -> lid
+                                  | e ->
+                                    Ploc.raise (loc_of_expr e)
+                                      (Failure "pa_deriving_hashcons: skip_types has malformed member")
+                                  ]) z
+    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option skip_types")
+  ] in
   {
     module_name = module_name
   ; type_decls = type_decls
   ; memo = memo
   ; external_types = external_types
+  ; skip_types = skip_types
   }
 ;
 
@@ -318,7 +340,7 @@ value generate_preeq_bindings ctxt rc (name, td) =
   let node_binding = (<:patt< ( $lid:node_eq_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
   let it_binding =
     let body =
-      if rho <> [] then
+      if rho <> [] || List.mem name rc.skip_types then
         let fexp = Expr.applist <:expr< $lid:node_eq_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
         <:expr< fun x y -> $fexp$ x y >>
       else
@@ -420,7 +442,7 @@ value generate_prehash_bindings ctxt rc (name, td) =
   let node_binding = (<:patt< ( $lid:node_hash_fname$ : $ftype$ ) >>, fbody, <:vala< [] >>) in
   let it_binding =
     let body =
-      if rho <> [] then
+      if rho <> [] || List.mem name rc.skip_types then
         let fexp = Expr.applist <:expr< $lid:node_hash_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
         <:expr< fun x -> $fexp$ x >>
       else
@@ -451,7 +473,7 @@ value generate_hash_bindings ctxt rc (name, td) =
 
   let it_binding =
     let body =
-      if rho <> [] then
+      if rho <> [] || List.mem name rc.skip_types then
         let fexp = Expr.applist <:expr< $lid:node_hash_fname$ >> (List.map (fun (_, f) -> <:expr< $lid:f$ >>) rho) in
         <:expr< fun x -> $fexp$ x >>
       else
@@ -680,7 +702,7 @@ value separate_bindings l =
 
 value generate_hashcons_module ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
-  if [] <> uv td.tdPrm then <:str_item< declare end >> else
+  if uv td.tdPrm <> [] || List.mem name rc.skip_types then <:str_item< declare end >> else
   let modname = hashcons_module_name (name, td) in
   let node_name = name^"_node" in
   let preeq_name = "preeq_"^name^"_node" in
@@ -694,7 +716,7 @@ value generate_hashcons_module ctxt rc (name, td) =
 
 value generate_hashcons_constructor ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
-  if [] <> uv td.tdPrm then <:str_item< declare end >> else
+  if uv td.tdPrm <> [] || List.mem name rc.skip_types then <:str_item< declare end >> else
   let modname = hashcons_module_name (name, td) in
   let consname = hashcons_constructor_name (name, td) in
   let htname = name^"_ht" in
@@ -707,7 +729,7 @@ value generate_hashcons_constructor ctxt rc (name, td) =
 end
 ;
 
-value hashconsed_type_decl ctxt td =
+value hashconsed_type_decl ctxt rc td =
   let loc = loc_of_type_decl td in
   let name = td.tdNam |> uv |> snd |> uv in
   let data_name = name^"_node" in
@@ -721,7 +743,7 @@ value hashconsed_type_decl ctxt td =
       ]) tyvars in
   let hc_tdDef =
     let data_type = <:ctyp< $lid:data_name$ >> in
-    if uv td.tdPrm <> [] then
+    if uv td.tdPrm <> [] || List.mem name rc.HC.skip_types then
       Ctyp.applist data_type tyargs
     else
       <:ctyp< hash_consed $Ctyp.applist data_type tyargs$ >> in
@@ -741,7 +763,7 @@ value hashconsed_type_decl ctxt td =
 value str_item_gen_hashcons name arg = fun [
   <:str_item:< type $_flag:_$ $list:tdl$ >> ->
     let rc = HC.build_context loc arg tdl in
-    let ll = List.map (hashconsed_type_decl arg) tdl in
+    let ll = List.map (hashconsed_type_decl arg rc) tdl in
     let new_tdl = List.concat ll in
     let new_tdl = List.map HC.strip_hashcons_attributes new_tdl in
     let preeq_bindings = List.concat (List.map (HC.generate_preeq_bindings arg rc) rc.HC.type_decls) in
@@ -769,10 +791,11 @@ value str_item_gen_hashcons name arg = fun [
 Pa_deriving.(Registry.add PI.{
   name = "hashcons"
 ; alternates = []
-; options = ["optional"; "module_name"; "memo"; "external_types"]
+; options = ["optional"; "module_name"; "memo"; "external_types"; "skip_types"]
 ; default_options = let loc = Ploc.dummy in [
     ("optional", <:expr< False >>)
   ; ("external_types", <:expr< () >>)
+  ; ("skip_types", <:expr< [] >>)
   ]
 ; alg_attributes = []
 ; expr_extensions = []
