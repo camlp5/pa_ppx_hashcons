@@ -5,8 +5,7 @@ exception Migration_error of string
 let migration_error feature =
   raise (Migration_error feature)
 
-type term_node = [%import: Lam_hashcons.term]
-and term = term_node
+[%%import: Lam_hashcons.LAM.term]
 [@@deriving migrate
     { dispatch_type = dispatch_table_t
     ; dispatch_table_constructor = make_dt
@@ -14,13 +13,13 @@ and term = term_node
     ; dispatchers = {
         migrate_term_node = {
           srctype = [%typ: term_node]
-        ; dsttype = [%typ: Lam_hashcons.HC.term_node]
+        ; dsttype = [%typ: Lam_hashcons.LAMH.term_node]
         }
       ; migrate_term = {
           srctype = [%typ: term]
-        ; dsttype = [%typ: Lam_hashcons.HC.term]
+        ; dsttype = [%typ: Lam_hashcons.LAMH.term]
         ; code = (fun __dt__ x ->
-            Lam_hashcons.HC.term (__dt__.migrate_term_node __dt__ x)
+            Lam_hashcons.LAMH.term (__dt__.migrate_term_node __dt__ x)
           )
         }
       }
@@ -34,7 +33,7 @@ exception Migration_error of string
 let migration_error feature =
   raise (Migration_error feature)
 
-[%%import: Lam_hashcons.HC.term]
+[%%import: Lam_hashcons.LAMH.term]
 [@@deriving migrate
     { dispatch_type = dispatch_table_t
     ; dispatch_table_constructor = make_dt
@@ -42,11 +41,11 @@ let migration_error feature =
     ; dispatchers = {
         migrate_term_node = {
           srctype = [%typ: term_node]
-        ; dsttype = [%typ: Lam_hashcons.term]
+        ; dsttype = [%typ: Lam_hashcons.LAM.term]
         }
       ; migrate_term = {
           srctype = [%typ: term]
-        ; dsttype = [%typ: Lam_hashcons.term]
+        ; dsttype = [%typ: Lam_hashcons.LAM.term]
         ; code = (fun __dt__ x ->
             __dt__.migrate_term_node __dt__ x.Hashcons.node
           )

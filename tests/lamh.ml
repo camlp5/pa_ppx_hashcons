@@ -6,7 +6,8 @@ type term =
     Ref of int
   | Abs of term
   | App of term * term[@@hashcons_module Term][@@hashcons_constructor term]
-[@@deriving hashcons { module_name = LAM
+[@@deriving hashcons { hashconsed_module_name = LAMH
+                     ; normal_module_name = LAM
                      ; memo = {
                          memo = [%typ: term]
                        ; memo_int = [%typ: int]
@@ -15,7 +16,7 @@ type term =
                        }
                      }]
 
-open LAM
+open LAMH
 open Hashcons
 
 let ref x = term (Ref x)

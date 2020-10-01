@@ -54,7 +54,8 @@ type external_funs_t = {
 ;
 
 type t = {
-  module_name : string
+  hashconsed_module_name : string
+; normal_module_name : string
 ; type_decls : list (string * MLast.type_decl)
 ; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
 ; external_types : list (MLast.ctyp * external_funs_t)
@@ -125,11 +126,17 @@ value build_context loc ctxt tdl =
       (tdNam |> uv |> snd |> uv, td)
     ) tdl in
   let open Ctxt in
-  let module_name = match option ctxt "module_name" with [
+  let hashconsed_module_name = match option ctxt "hashconsed_module_name" with [
     <:expr< $uid:mname$ >> -> mname
-  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option module_name must be a UIDENT")
+  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option hashconsed_module_name must be a UIDENT")
   | exception Failure _ ->
-  Ploc.raise loc (Failure "pa_deriving_hashcons: option module_name must be specified")
+  Ploc.raise loc (Failure "pa_deriving_hashcons: option hashconsed_module_name must be specified")
+  ] in
+  let normal_module_name = match option ctxt "normal_module_name" with [
+    <:expr< $uid:mname$ >> -> mname
+  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option normal_module_name must be a UIDENT")
+  | exception Failure _ ->
+  Ploc.raise loc (Failure "pa_deriving_hashcons: option normal_module_name must be specified")
   ] in
   let memo = match option ctxt "memo" with [
     <:expr< { $list:lel$ } >> ->
@@ -165,7 +172,8 @@ value build_context loc ctxt tdl =
     | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option skip_types")
   ] in
   {
-    module_name = module_name
+    hashconsed_module_name = hashconsed_module_name
+  ; normal_module_name = normal_module_name
   ; type_decls = type_decls
   ; memo = memo
   ; external_types = external_types
@@ -729,7 +737,7 @@ value generate_hashcons_constructor ctxt rc (name, td) =
 end
 ;
 
-value hashconsed_type_decl ctxt rc td =
+value make_twolevel_type_decl ctxt rc ~{preserve_manifest} ~{skip_hashcons} td =
   let loc = loc_of_type_decl td in
   let name = td.tdNam |> uv |> snd |> uv in
   let data_name = name^"_node" in
@@ -743,7 +751,7 @@ value hashconsed_type_decl ctxt rc td =
       ]) tyvars in
   let hc_tdDef =
     let data_type = <:ctyp< $lid:data_name$ >> in
-    if uv td.tdPrm <> [] || List.mem name rc.HC.skip_types then
+    if skip_hashcons then
       Ctyp.applist data_type tyargs
     else
       <:ctyp< hash_consed $Ctyp.applist data_type tyargs$ >> in
@@ -752,7 +760,7 @@ value hashconsed_type_decl ctxt rc td =
         let n = <:vala< data_name >> in
         <:vala< (loc, n) >>
       ; tdDef = match td.tdDef with [
-          <:ctyp< $_$ == $t$ >> -> t
+          <:ctyp< $_$ == $t$ >> when not preserve_manifest -> t
         | t -> t
         ]
     }
@@ -760,12 +768,32 @@ value hashconsed_type_decl ctxt rc td =
   ]
 ;
 
+value normal_type_decl ctxt rc td =
+  let skip_hashcons = True in
+  let preserve_manifest = True in
+  make_twolevel_type_decl ctxt rc ~{preserve_manifest=preserve_manifest} ~{skip_hashcons=skip_hashcons} td
+;
+
+value hashconsed_type_decl ctxt rc td =
+  let name = td.tdNam |> uv |> snd |> uv in
+  let skip_hashcons = uv td.tdPrm <> [] || List.mem name rc.HC.skip_types in
+  let preserve_manifest = False in
+  make_twolevel_type_decl ctxt rc ~{preserve_manifest=preserve_manifest} ~{skip_hashcons=skip_hashcons} td
+;
+
 value str_item_gen_hashcons name arg = fun [
   <:str_item:< type $_flag:_$ $list:tdl$ >> ->
     let rc = HC.build_context loc arg tdl in
-    let ll = List.map (hashconsed_type_decl arg rc) tdl in
-    let new_tdl = List.concat ll in
-    let new_tdl = List.map HC.strip_hashcons_attributes new_tdl in
+    let new_tdl =
+      tdl
+      |> List.map (hashconsed_type_decl arg rc)
+      |> List.concat
+      |> List.map HC.strip_hashcons_attributes in
+    let normal_tdl =
+      tdl
+      |> List.map (normal_type_decl arg rc)
+      |> List.concat
+      |> List.map HC.strip_hashcons_attributes in
     let preeq_bindings = List.concat (List.map (HC.generate_preeq_bindings arg rc) rc.HC.type_decls) in
     let prehash_bindings = List.concat (List.map (HC.generate_prehash_bindings arg rc) rc.HC.type_decls) in
     let hashcons_modules = List.map (HC.generate_hashcons_module arg rc) rc.HC.type_decls in
@@ -775,23 +803,28 @@ value str_item_gen_hashcons name arg = fun [
     let memo_items = List.map (Reloc.str_item (fun _ -> Ploc.dummy) 0) memo_items in
     let memo_items = HC.flatten_str_items memo_items in
     let (module_items, bindings) = HC.separate_bindings memo_items in
-    <:str_item< module $uid:rc.module_name$ = struct
-                open Hashcons ;
-                type $list:new_tdl$ ;
-                value rec $list:preeq_bindings$ ;
-                value rec $list:prehash_bindings$ ;
-                declare $list:hashcons_modules @ hashcons_constructors$ end ;
-                value rec $list:hash_bindings$ ;
-                declare $list:module_items$ end ;
-                value rec $list:bindings$ ;
-                  end >>
+    <:str_item< declare
+                  module $uid:rc.normal_module_name$ = struct
+                  type $list:normal_tdl$ ;
+                  end ;
+                  module $uid:rc.hashconsed_module_name$ = struct
+                  open Hashcons ;
+                  type $list:new_tdl$ ;
+                  value rec $list:preeq_bindings$ ;
+                  value rec $list:prehash_bindings$ ;
+                  declare $list:hashcons_modules @ hashcons_constructors$ end ;
+                  value rec $list:hash_bindings$ ;
+                  declare $list:module_items$ end ;
+                  value rec $list:bindings$ ;
+                  end ;
+                end>>
 | _ -> assert False ]
 ;
 
 Pa_deriving.(Registry.add PI.{
   name = "hashcons"
 ; alternates = []
-; options = ["optional"; "module_name"; "memo"; "external_types"; "skip_types"]
+; options = ["optional"; "hashconsed_module_name"; "normal_module_name"; "memo"; "external_types"; "skip_types"]
 ; default_options = let loc = Ploc.dummy in [
     ("optional", <:expr< False >>)
   ; ("external_types", <:expr< () >>)

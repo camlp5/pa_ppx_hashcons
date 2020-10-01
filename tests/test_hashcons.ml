@@ -11,7 +11,8 @@ and term =
   | App of term * term
   | Foo of term_option
 [@@hashcons_module Term][@@hashcons_constructor term]
-[@@deriving hashcons { module_name = LAM
+[@@deriving hashcons { hashconsed_module_name = LAMH
+                     ; normal_module_name = LAM
                      ; memo = {
                          memo_term = [%typ: term]
                        ; memo_int = [%typ: int]
@@ -46,7 +47,8 @@ type term =
   | App of term * term
   | Foo of term Option.t
 [@@hashcons_module Term][@@hashcons_constructor term]
-[@@deriving hashcons { module_name = LAM2
+[@@deriving hashcons { hashconsed_module_name = LAM2H
+                     ; normal_module_name = LAM2
                      ; memo = {
                          memo_term = [%typ: term]
                        ; memo_int_term = [%typ: int * term]
@@ -75,7 +77,8 @@ let prehash_variable x = Hashtbl.hash x ;;
 let hash_variable = prehash_variable
 
 type bdd = Zero | One | Node of variable * bdd (*low*) * bdd (*high*)
-[@@deriving hashcons { module_name = BDD
+[@@deriving hashcons { hashconsed_module_name = BDDH
+                     ; normal_module_name = BDD
                      ; memo = {
                          memo_bdd = [%typ: bdd]
                        ; memo_bdd_bdd = [%typ: bdd * bdd]
@@ -97,7 +100,8 @@ let hash_list = prehash_list
        type_var := MLast.type_var ;
     ]
 ]
-[@@deriving hashcons { module_name = AST
+[@@deriving hashcons { hashconsed_module_name = ASTH
+                     ; normal_module_name = AST
                      ; memo = {
                          memo_expr = [%typ: expr]
                        }
