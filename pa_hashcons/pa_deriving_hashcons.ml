@@ -53,6 +53,11 @@ type external_funs_t = {
 }
 ;
 
+type pertype_customization_t = {
+  hashcons_module : option string
+; hashcons_constructor : option string
+}
+;
 type t = {
   hashconsed_module_name : string
 ; normal_module_name : string
@@ -60,6 +65,7 @@ type t = {
 ; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
 ; external_types : list (MLast.ctyp * external_funs_t)
 ; skip_types : list string
+; pertype_customization : list (string * pertype_customization_t)
 }
 ;
 
@@ -121,6 +127,26 @@ value extract_external_funs_t loc ctxt = fun [
 ]
 ;
 
+value extract_pertype_customization loc lel =
+  let alist = List.map (fun [
+      (<:patt< $lid:id$ >>, e) -> (id, e)
+    | _ -> Ploc.raise loc (Failure "bad pertype label -- must be lident")
+    ]) lel in
+  let hashcons_module = match List.assoc "hashcons_module" alist with [
+    <:expr< $uid:uid$ >> -> Some uid
+  | _ -> Ploc.raise loc (Failure "bad hashcons_module tyarg rhs -- must be UIDENT")
+  | exception Not_found -> None
+  ] in
+  let hashcons_constructor = match List.assoc "hashcons_constructor" alist with [
+    <:expr< $lid:lid$ >> -> Some lid
+  | _ -> Ploc.raise loc (Failure "bad hashcons_constructor tyarg rhs -- must be LIDENT")
+  | exception Not_found -> None
+  ] in
+  { hashcons_module = hashcons_module
+  ; hashcons_constructor = hashcons_constructor
+  }
+;
+
 value build_context loc ctxt tdl =
   let type_decls = List.map (fun (MLast.{tdNam=tdNam} as td) ->
       (tdNam |> uv |> snd |> uv, td)
@@ -171,6 +197,17 @@ value build_context loc ctxt tdl =
                                   ]) z
     | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option skip_types")
   ] in
+  let pertype_customization = match option ctxt "pertype_customization" with [
+      <:expr:< { $list:lel$ } >> ->
+        List.map (fun [
+            (<:patt< $lid:tyname$ >>, <:expr< { $list:args$ } >>) ->
+            (tyname, extract_pertype_customization loc args)
+          | (p,_) -> Ploc.raise (loc_of_patt p)
+              (Failure "pa_deriving_hashcons: malformed option pertype_customization member")
+          ]) lel
+    | <:expr< () >> -> []
+    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option pertype_customization")
+  ] in
   {
     hashconsed_module_name = hashconsed_module_name
   ; normal_module_name = normal_module_name
@@ -178,6 +215,7 @@ value build_context loc ctxt tdl =
   ; memo = memo
   ; external_types = external_types
   ; skip_types = skip_types
+  ; pertype_customization = pertype_customization
   }
 ;
 
@@ -186,29 +224,23 @@ value strip_hashcons_attributes td =
     tdAttributes =
       vala_map (Std.filter (fun a ->
           not (List.mem (a |> uv |> fst |> uv |> snd)
-            ["hashcons_module"; "hashcons_constructor"; "deriving"])))
+            ["deriving"])))
         td.tdAttributes }
 ;
 
-value hashcons_module_name (name, td) =
-  match List.find_map (fun a ->
-      match uv a with [
-        <:attribute_body< hashcons_module $uid:mname$ ; >> -> Some mname
-      | _ -> None
-      ]) (uv td.tdAttributes) with [
-    Some n -> n
-  | None -> "HC_"^name
+value hashcons_module_name rc name =
+  match List.assoc name rc.pertype_customization with [
+    {hashcons_module = Some n} -> n
+  | _ -> "HC_"^name
+  | exception Not_found -> "HC_"^name
   ]
 ;
 
-value hashcons_constructor_name (name, td) =
-  match List.find_map (fun a ->
-      match uv a with [
-        <:attribute_body< hashcons_constructor $lid:cname$ ; >> -> Some cname
-      | _ -> None
-      ]) (uv td.tdAttributes) with [
-    Some n -> n
-  | None -> "make_"^name
+value hashcons_constructor_name rc name =
+  match List.assoc name rc.pertype_customization with [
+    {hashcons_constructor = Some n} -> n
+  | _ -> "make_"^name
+  | exception Not_found -> "make_"^name
   ]
 ;
 
@@ -711,7 +743,7 @@ value separate_bindings l =
 value generate_hashcons_module ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
   if uv td.tdPrm <> [] || List.mem name rc.skip_types then <:str_item< declare end >> else
-  let modname = hashcons_module_name (name, td) in
+  let modname = hashcons_module_name rc name in
   let node_name = name^"_node" in
   let preeq_name = "preeq_"^name^"_node" in
   let prehash_name = "prehash_"^name^"_node" in
@@ -725,8 +757,8 @@ value generate_hashcons_module ctxt rc (name, td) =
 value generate_hashcons_constructor ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
   if uv td.tdPrm <> [] || List.mem name rc.skip_types then <:str_item< declare end >> else
-  let modname = hashcons_module_name (name, td) in
-  let consname = hashcons_constructor_name (name, td) in
+  let modname = hashcons_module_name rc name in
+  let consname = hashcons_constructor_name rc name in
   let htname = name^"_ht" in
   <:str_item< declare
                  value $lid:htname$ = $uid:modname$.create 10007 ;
@@ -824,11 +856,14 @@ value str_item_gen_hashcons name arg = fun [
 Pa_deriving.(Registry.add PI.{
   name = "hashcons"
 ; alternates = []
-; options = ["optional"; "hashconsed_module_name"; "normal_module_name"; "memo"; "external_types"; "skip_types"]
+; options = ["optional"
+            ; "hashconsed_module_name"; "normal_module_name"; "memo"
+            ; "external_types"; "skip_types"; "pertype_customization"]
 ; default_options = let loc = Ploc.dummy in [
     ("optional", <:expr< False >>)
   ; ("external_types", <:expr< () >>)
   ; ("skip_types", <:expr< [] >>)
+  ; ("pertype_customization", <:expr< () >>)
   ]
 ; alg_attributes = []
 ; expr_extensions = []

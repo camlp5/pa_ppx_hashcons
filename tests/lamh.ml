@@ -5,7 +5,7 @@
 type term =
     Ref of int
   | Abs of term
-  | App of term * term[@@hashcons_module Term][@@hashcons_constructor term]
+  | App of term * term
 [@@deriving hashcons { hashconsed_module_name = LAMH
                      ; normal_module_name = LAM
                      ; memo = {
@@ -13,6 +13,12 @@ type term =
                        ; memo_int = [%typ: int]
                        ; memo2_int_term = [%typ: int * term]
                        ; memo2_term_term = [%typ: term * term]
+                       }
+                     ; pertype_customization = {
+                         term = {
+                           hashcons_module = Term
+                         ; hashcons_constructor = term
+                         }
                        }
                      }]
 

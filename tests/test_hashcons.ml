@@ -1,7 +1,7 @@
 (* camlp5o *)
 (* test_hashcons.ml *)
 
-type 'a id = 'a [@@hashcons_skip]
+type 'a id = 'a
 and 'a option = 'a Option.t = None | Some of 'a
 and term_id = term id
 and term_option = term option
@@ -10,7 +10,6 @@ and term =
   | Abs of term_id
   | App of term * term
   | Foo of term_option
-[@@hashcons_module Term][@@hashcons_constructor term]
 [@@deriving hashcons { hashconsed_module_name = LAMH
                      ; normal_module_name = LAM
                      ; memo = {
@@ -27,6 +26,15 @@ and term =
                        ; memo_term4 = [%typ: term * term * term * term]
                        ; memo_term4_int2 = [%typ: term * int * term * term * int * term]
                        ; memo_term3_term = [%typ: ((term * term) * term) * term]
+                       }
+                     ; skip_types = [
+                         id
+                       ]
+                     ; pertype_customization = {
+                         term = {
+                           hashcons_module = Term
+                         ; hashcons_constructor = term
+                         }
                        }
                      }]
 ;;
@@ -46,7 +54,6 @@ type term =
   | Abs of term
   | App of term * term
   | Foo of term Option.t
-[@@hashcons_module Term][@@hashcons_constructor term]
 [@@deriving hashcons { hashconsed_module_name = LAM2H
                      ; normal_module_name = LAM2
                      ; memo = {
@@ -64,6 +71,12 @@ type term =
                              Hashtbl.hash (Option.map f x))
                          ; hash = (fun f x ->
                              Hashtbl.hash (Option.map f x))
+                         }
+                       }
+                     ; pertype_customization = {
+                         term = {
+                           hashcons_module = Term
+                         ; hashcons_constructor = term
                          }
                        }
                      }]
