@@ -11,6 +11,8 @@ CAMLP5R=camlp5r -I $(CAMLP5LIB)
 INCLUDES=
 OCAMLCFLAGS= $(INCLUDES)
 PACKAGES=unix,camlp5
+PACKAGES := $(PACKAGES),camlp5.parser_quotations
+#PACKAGES := $(PACKAGES),camlp5.quotations
 SYNTAX = camlp5r
 
 export PERL5LIB := $(TOP):$(PERL5LIB)

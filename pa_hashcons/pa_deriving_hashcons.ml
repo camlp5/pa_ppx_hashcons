@@ -2,12 +2,6 @@
 (* pa_deriving_migrate.ml,v *)
 (* Copyright (c) INRIA 2007-2017 *)
 
-#load "pa_extend.cmo";
-#load "q_MLast.cmo";
-#load "pa_macro.cmo";
-#load "pa_macro_gram.cmo";
-#load "pa_extfun.cmo";
-
 open Asttools;
 open MLast;
 open Pa_ppx_base ;
@@ -596,7 +590,7 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
     let fun_body = Expr.abstract_over vars_patts body in
     <:str_item<
       declare
-        module $mname$ = Hashtbl.Make(struct
+        module $uid:mname$ = Hashtbl.Make(struct
           type t = $z$ ;
           value equal = $generate_eq_expression loc "eq" ctxt rc [] z$ ;
           value hash = $generate_hash_expression loc "hash" ctxt rc [] z$ ;
@@ -611,7 +605,7 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
     let mname = Printf.sprintf "HT_%s" memo_fname in
     <:str_item<
       declare
-        module $mname$ = Ephemeron.K1.Make(struct
+        module $uid:mname$ = Ephemeron.K1.Make(struct
           type t = $z$ ;
           value equal = $generate_eq_expression loc "preeq" ctxt rc [] z$ ;
           value hash = $generate_hash_expression loc "prehash" ctxt rc [] z$ ;
@@ -633,7 +627,7 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
     let mname = Printf.sprintf "HT_%s" memo_fname in
     <:str_item<
       declare
-        module $mname$ = Ephemeron.K2.Make
+        module $uid:mname$ = Ephemeron.K2.Make
           (struct
             type t = $z0$ ;
             value equal = $generate_eq_expression loc "preeq" ctxt rc [] z0$ ;
@@ -734,7 +728,7 @@ value flatten_str_items sil =
 
 value separate_bindings l =
   let (ml, vl)  = List.fold_left (fun (mb,vb) -> fun [
-      <:str_item< module $_$ = $_$ >> as z -> ([ z :: mb ], vb)
+      <:str_item< module $uid:_$ = $_$ >> as z -> ([ z :: mb ], vb)
     | <:str_item< value $list:l$ >> -> (mb, l @ vb)
     ]) ([], []) l in
   (List.rev ml, List.rev vl)
