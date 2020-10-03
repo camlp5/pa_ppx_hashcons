@@ -29,25 +29,43 @@ value builtin_types =
   ]
 ;
 
-value convert_down_list_expr f e =
-  let rec crec acc = fun [
-    <:expr< [] >> -> List.rev acc
-  | <:expr< [ $h$ :: $tl$ ] >> ->
-    crec [ f h :: acc ] tl
-  | _ -> Ploc.raise (loc_of_expr e) (Failure Fmt.(str "convert_down_list_expr: malformed list-expression %a"
-                                                    Pp_MLast.pp_expr e))
-  ] in
-  crec [] e
+open Pa_ppx_params.Runtime ;
+
+module Params = struct
+
+type external_funs_t = {
+  preeq : expr
+; prehash : expr
+} [@@deriving params;]
 ;
 
+type pertype_customization_t = {
+  hashcons_module : option uident
+; hashcons_constructor : option lident
+} [@@deriving params;]
+;
+
+type t = {
+  hashconsed_module_name : uident
+; normal_module_name : uident
+; memo : (alist lident ctyp) [@default [];]
+; external_types : (alist longid_lident external_funs_t) [@default [];]
+; skip_types : (list lident) [@default [];]
+; pertype_customization : (alist lident pertype_customization_t) [@default [];]
+} [@@deriving params;]
+;
+end
+;
+
+
 module HC = struct
-type external_funs_t = {
+type external_funs_t = Params.external_funs_t == {
   preeq : MLast.expr
 ; prehash : MLast.expr
 }
 ;
 
-type pertype_customization_t = {
+type pertype_customization_t = Params.pertype_customization_t == {
   hashcons_module : option string
 ; hashcons_constructor : option string
 }
@@ -57,7 +75,7 @@ type t = {
 ; normal_module_name : string
 ; type_decls : list (string * MLast.type_decl)
 ; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
-; external_types : list (MLast.ctyp * external_funs_t)
+; external_types : list (MLast.longid_lident * external_funs_t)
 ; skip_types : list string
 ; pertype_customization : list (string * pertype_customization_t)
 }
@@ -89,119 +107,22 @@ value extract_memo_type_list type_decls t =
   ]
 ;
 
-value extract_external_funs_t loc ctxt = fun [
-  <:expr:< { $list:lel$ } >> as z ->
-    let alist = List.map (fun [
-        (<:patt< $lid:lid$ >>, e) -> (lid, e)
-      | _ ->
-        Ploc.raise (loc_of_expr z)
-           (Failure Fmt.(str "extract_external_funs_t: keys of record-expression are not lidents:@ %a"
-                           Pp_MLast.pp_expr z))
-    ]) lel in
-    let preeq = match List.assoc "preeq" alist with [
-      x -> x
-    | exception Not_found -> 
-      Ploc.raise (loc_of_expr z)
-        (Failure Fmt.(str "extract_external_funs_t: missing preeq:@ %a"
-                        Pp_MLast.pp_expr z))
-    ] in
-    let prehash = match List.assoc "prehash" alist with [
-      x -> x
-    | exception Not_found -> 
-      Ploc.raise (loc_of_expr z)
-        (Failure Fmt.(str "extract_external_funs_t: missing prehash:@ %a"
-                        Pp_MLast.pp_expr z))
-    ] in
-    { preeq = preeq
-    ; prehash = prehash
-    }
-| e -> Ploc.raise (loc_of_expr e)
-           (Failure Fmt.(str "extract_external_funs_t: not a record-expression:@ %a"
-                           Pp_MLast.pp_expr e))
-]
-;
-
-value extract_pertype_customization loc lel =
-  let alist = List.map (fun [
-      (<:patt< $lid:id$ >>, e) -> (id, e)
-    | _ -> Ploc.raise loc (Failure "bad pertype label -- must be lident")
-    ]) lel in
-  let hashcons_module = match List.assoc "hashcons_module" alist with [
-    <:expr< $uid:uid$ >> -> Some uid
-  | _ -> Ploc.raise loc (Failure "bad hashcons_module tyarg rhs -- must be UIDENT")
-  | exception Not_found -> None
-  ] in
-  let hashcons_constructor = match List.assoc "hashcons_constructor" alist with [
-    <:expr< $lid:lid$ >> -> Some lid
-  | _ -> Ploc.raise loc (Failure "bad hashcons_constructor tyarg rhs -- must be LIDENT")
-  | exception Not_found -> None
-  ] in
-  { hashcons_module = hashcons_module
-  ; hashcons_constructor = hashcons_constructor
-  }
-;
-
 value build_context loc ctxt tdl =
   let type_decls = List.map (fun (MLast.{tdNam=tdNam} as td) ->
       (tdNam |> uv |> snd |> uv, td)
     ) tdl in
-  let open Ctxt in
-  let hashconsed_module_name = match option ctxt "hashconsed_module_name" with [
-    <:expr< $uid:mname$ >> -> mname
-  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option hashconsed_module_name must be a UIDENT")
-  | exception Failure _ ->
-  Ploc.raise loc (Failure "pa_deriving_hashcons: option hashconsed_module_name must be specified")
-  ] in
-  let normal_module_name = match option ctxt "normal_module_name" with [
-    <:expr< $uid:mname$ >> -> mname
-  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option normal_module_name must be a UIDENT")
-  | exception Failure _ ->
-  Ploc.raise loc (Failure "pa_deriving_hashcons: option normal_module_name must be specified")
-  ] in
-  let memo = match option ctxt "memo" with [
-    <:expr< { $list:lel$ } >> ->
-    List.map (fun [
-        (<:patt< $lid:memo_fname$ >>, <:expr< [%typ: $type:t$] >>) -> 
-        (memo_fname, extract_memo_type_list type_decls t)
-      | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: bad memo record-members")
-      ]) lel
-  | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: option memo requires a record argument")
-  ] in
-  let external_types = match option ctxt "external_types" with [
-      <:expr:< { $list:lel$ } >> ->
-        List.map (fun (p, e) ->
-            let extfuns = extract_external_funs_t loc ctxt e in
-            let ty = match p with [
-              <:patt:< $lid:lid$ >> -> canon_ctyp <:ctyp< $lid:lid$ >>
-            | <:patt:< $longid:li$ . $lid:lid$ >> -> canon_ctyp <:ctyp< $longid:li$ . $lid:lid$ >>
-            | p -> Ploc.raise (loc_of_patt p)
-                (Failure Fmt.(str "pa_deriving_hashcons: key in external_types not a type:@ %a"
-                                Pp_MLast.pp_patt p))
-            ] in (ty, extfuns)
-          ) lel
-    | <:expr< () >> -> []
-    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option external_types")
-  ] in
-  let skip_types = match option ctxt "skip_types" with [
-      <:expr:< [ $_$ :: $_$ ] >> | <:expr:< [] >> as z ->
-      convert_down_list_expr (fun [ <:expr< $lid:lid$ >> -> lid
-                                  | e ->
-                                    Ploc.raise (loc_of_expr e)
-                                      (Failure "pa_deriving_hashcons: skip_types has malformed member")
-                                  ]) z
-    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option skip_types")
-  ] in
-  let pertype_customization = match option ctxt "pertype_customization" with [
-      <:expr:< { $list:lel$ } >> ->
-        List.map (fun [
-            (<:patt< $lid:tyname$ >>, <:expr< { $list:args$ } >>) ->
-            (tyname, extract_pertype_customization loc args)
-          | (p,_) -> Ploc.raise (loc_of_patt p)
-              (Failure "pa_deriving_hashcons: malformed option pertype_customization member")
-          ]) lel
-    | <:expr< () >> -> []
-    | _ -> Ploc.raise loc (Failure "pa_deriving_hashcons: malformed option pertype_customization")
-  ] in
+  let optarg =
+    let l = List.map (fun (k, e) -> (<:patt< $lid:k$ >>, e)) (Ctxt.options ctxt) in
+    <:expr< { $list:l$ } >> in
+  let rc0 = Params.params optarg in
+  let hashconsed_module_name = rc0.Params.hashconsed_module_name in
+  let normal_module_name = rc0.Params.normal_module_name in
+  let memo = List.map (fun (k, v) ->
+    (k, extract_memo_type_list type_decls v))
+    rc0.Params.memo in
+  let external_types = rc0.Params.external_types in
+  let skip_types = rc0.Params.skip_types in
+  let pertype_customization = rc0.Params.pertype_customization in
   {
     hashconsed_module_name = hashconsed_module_name
   ; normal_module_name = normal_module_name
@@ -241,14 +162,17 @@ value hashcons_constructor_name rc name =
 value generate_eq_expression loc eq_prefix ctxt rc rho ty =
   let rec prerec = fun [
 
-    t when List.mem_assoc (canon_ctyp t) rc.external_types ->
-    (List.assoc (canon_ctyp t) rc.external_types).preeq
+    <:ctyp< $lid:lid$ >> when AList.mem ~{cmp=Reloc.eq_longid_lident} (None, <:vala< lid >>) rc.external_types ->
+    (AList.assoc ~{cmp=Reloc.eq_longid_lident} (None, <:vala< lid >>) rc.external_types).preeq
 
-  | <:ctyp< $_$ == $t$ >> -> prerec t
+  | <:ctyp< $longid:li$ . $lid:lid$ >> when AList.mem ~{cmp=Reloc.eq_longid_lident} (Some <:vala< li >>, <:vala< lid >>) rc.external_types ->
+    (AList.assoc ~{cmp=Reloc.eq_longid_lident} (Some <:vala< li >>, <:vala< lid >>) rc.external_types).preeq
 
   | <:ctyp< $longid:li$ . $lid:lid$ >> ->
     let eq_name = eq_prefix^"_"^lid in
     Expr.prepend_longident li <:expr< $lid:eq_name$ >>
+
+  | <:ctyp< $_$ == $t$ >> -> prerec t
 
   | <:ctyp:< $lid:lid$ >> as z when List.mem_assoc lid rc.type_decls ->
     let eq_name = eq_prefix^"_"^lid in
@@ -264,6 +188,7 @@ value generate_eq_expression loc eq_prefix ctxt rc rho ty =
   | <:ctyp:< $_$ $_$ >> as z ->
     let (ty, args) = Ctyp.unapplist z in
     Expr.applist <:expr< $prerec ty$ >> (List.map prerec args)
+
   | <:ctyp< ' $id$ >> when List.mem_assoc id rho ->
     <:expr< $lid:List.assoc id rho$ >>
   | <:ctyp:< ( $list:l$ ) >> ->
@@ -388,8 +313,12 @@ value generate_preeq_bindings ctxt rc (name, td) =
 
 value generate_hash_expression loc hash_prefix ctxt rc rho ty =
   let rec prerec = fun [
-    t when List.mem_assoc (canon_ctyp t) rc.external_types ->
-    (List.assoc (canon_ctyp t) rc.external_types).prehash
+
+    <:ctyp< $lid:lid$ >> when AList.mem ~{cmp=Reloc.eq_longid_lident} (None, <:vala< lid >>) rc.external_types ->
+    (AList.assoc ~{cmp=Reloc.eq_longid_lident} (None, <:vala< lid >>) rc.external_types).prehash
+
+  | <:ctyp< $longid:li$ . $lid:lid$ >> when AList.mem ~{cmp=Reloc.eq_longid_lident} (Some <:vala< li >>, <:vala< lid >>) rc.external_types ->
+    (AList.assoc ~{cmp=Reloc.eq_longid_lident} (Some <:vala< li >>, <:vala< lid >>) rc.external_types).prehash
 
   | <:ctyp< $_$ == $t$ >> -> prerec t
 
