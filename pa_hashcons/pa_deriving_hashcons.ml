@@ -31,7 +31,7 @@ value builtin_types =
 
 open Pa_ppx_params.Runtime ;
 
-module Params = struct
+module HC = struct
 
 type external_funs_t = {
   preeq : expr
@@ -43,42 +43,6 @@ type pertype_customization_t = {
   hashcons_module : option uident
 ; hashcons_constructor : option lident
 } [@@deriving params;]
-;
-
-type t = {
-  hashconsed_module_name : uident
-; normal_module_name : uident
-; memo : (alist lident ctyp) [@default [];]
-; external_types : (alist longid_lident external_funs_t) [@default [];]
-; skip_types : (list lident) [@default [];]
-; pertype_customization : (alist lident pertype_customization_t) [@default [];]
-} [@@deriving params;]
-;
-end
-;
-
-
-module HC = struct
-type external_funs_t = Params.external_funs_t == {
-  preeq : MLast.expr
-; prehash : MLast.expr
-}
-;
-
-type pertype_customization_t = Params.pertype_customization_t == {
-  hashcons_module : option string
-; hashcons_constructor : option string
-}
-;
-type t = {
-  hashconsed_module_name : string
-; normal_module_name : string
-; type_decls : list (string * MLast.type_decl)
-; memo : list (string * choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))
-; external_types : list (MLast.longid_lident * external_funs_t)
-; skip_types : list string
-; pertype_customization : list (string * pertype_customization_t)
-}
 ;
 
 value extract_memo_type_list type_decls t =
@@ -107,6 +71,28 @@ value extract_memo_type_list type_decls t =
   ]
 ;
 
+value compute_memo type_decls raw_memo =
+  List.map (fun (k, v) ->
+             (k, extract_memo_type_list type_decls v))
+    raw_memo
+;
+
+type t = {
+  hashconsed_module_name : uident
+; normal_module_name : uident
+; type_decls : list (string * MLast.type_decl) [@computed type_decls;]
+; raw_memo : (alist lident ctyp) [@default [];] [@name memo;]
+; memo : (alist lident  (choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))) [@computed compute_memo type_decls raw_memo;]
+; external_types : (alist longid_lident external_funs_t) [@default [];]
+; skip_types : (list lident) [@default [];]
+; pertype_customization : (alist lident pertype_customization_t) [@default [];]
+} [@@deriving params {
+    formal_args = {
+      t = [ type_decls ]
+    }
+  };]
+;
+
 value build_context loc ctxt tdl =
   let type_decls = List.map (fun (MLast.{tdNam=tdNam} as td) ->
       (tdNam |> uv |> snd |> uv, td)
@@ -114,24 +100,7 @@ value build_context loc ctxt tdl =
   let optarg =
     let l = List.map (fun (k, e) -> (<:patt< $lid:k$ >>, e)) (Ctxt.options ctxt) in
     <:expr< { $list:l$ } >> in
-  let rc0 = Params.params optarg in
-  let hashconsed_module_name = rc0.Params.hashconsed_module_name in
-  let normal_module_name = rc0.Params.normal_module_name in
-  let memo = List.map (fun (k, v) ->
-    (k, extract_memo_type_list type_decls v))
-    rc0.Params.memo in
-  let external_types = rc0.Params.external_types in
-  let skip_types = rc0.Params.skip_types in
-  let pertype_customization = rc0.Params.pertype_customization in
-  {
-    hashconsed_module_name = hashconsed_module_name
-  ; normal_module_name = normal_module_name
-  ; type_decls = type_decls
-  ; memo = memo
-  ; external_types = external_types
-  ; skip_types = skip_types
-  ; pertype_customization = pertype_customization
-  }
+  params type_decls optarg
 ;
 
 value strip_hashcons_attributes td =

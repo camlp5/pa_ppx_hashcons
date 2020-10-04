@@ -2,7 +2,7 @@
 # Copyright (c) INRIA 2007-2017
 
 WD=$(shell pwd)
-TOP=$(WD)/..
+TOP=..
 include $(TOP)/config/Makefile
 
 DESTDIR=
@@ -21,6 +21,16 @@ OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
 
 TESTS= \
 	test_hashcons.byte lamh.byte lamh.opt test_inject.byte \
+
+ML=\
+	test_hashcons.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
+
+
+CMO := $(ML:.ml=.cmo)
+CMI := $(ML:.ml=.cmi)
+CMX := $(ML:.ml=.cmx)
+CMT := $(ML:.ml=.cmt)
+CMTI := $(MLI:.mli=.cmti)
 
 all: $(TESTS)
 
@@ -56,12 +66,12 @@ test_inject.opt: lam.cmx lam_hashcons.cmx lam_migrate.cmx
 clean::
 	rm -f  *.ppo.*
 
-EXTERNAL := $(shell $(OCAMLFIND) query -predicates byte -format '%m' $(ALL_PACKAGES) | grep local-install)
+EXTERNAL := $(shell $(OCAMLFIND) query -predicates byte -format '%m' $(PACKAGES) | grep local-install)
 $(CMO): $(EXTERNAL)
 
 depend::
 	echo "$(CMO): $(EXTERNAL)" > .depend.NEW
-	$(OCAMLFIND) ocamldep $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax camlp5o \
+	$(OCAMLFIND) ocamldep $(OCAMLCFLAGS) -package $(PACKAGES) -syntax camlp5o \
 	*.ml \
 	>> .depend.NEW
 	mv .depend.NEW .depend
