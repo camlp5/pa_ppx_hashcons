@@ -4,6 +4,7 @@
 RM=rm
 
 OCAMLFIND=ocamlfind
+NOT_OCAMLFIND=not-ocamlfind
 OCAMLTOPLEVEL=ocaml
 CAMLP5LIB=$(shell $(OCAMLFIND) query camlp5)
 MKCAMLP5=mkcamlp5
@@ -14,6 +15,7 @@ PACKAGES=unix,camlp5
 PACKAGES := $(PACKAGES),camlp5.parser_quotations
 #PACKAGES := $(PACKAGES),camlp5.quotations
 SYNTAX = camlp5r
+PRPACKAGE = camlp5.pr_r
 
 export PERL5LIB := $(TOP):$(PERL5LIB)
 
@@ -23,6 +25,8 @@ top: all
 	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<
 
 .ml.cmo:
+	$(NOT_OCAMLFIND) preprocess $(OCAMLCFLAGS) -package $(PACKAGES),$(PRPACKAGE) -syntax $(SYNTAX) $< > $*_ppo.ml
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $*_ppo.ml
 	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) $(OCAMLCFLAGS) -package $(PACKAGES) -syntax $(SYNTAX) -c $<
 
 .ml.cmx:
@@ -41,6 +45,6 @@ top: all
 .SUFFIXES: .cmo .cmi .ml .mli .cmx .cma .cmxa .cmt .cmti
 
 clean::
-	$(RM) -rf *.cm* *.o *.a *.byte *.opt *.log *.cache *.ppo *.ppo.ml _build/* .cmt *.odoc
+	$(RM) -rf *.cm* *.o *.a *.byte *.opt *.log *.cache *.ppo *ppo.ml _build/* .cmt *.odoc
 
 realclean:: clean

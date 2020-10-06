@@ -726,8 +726,15 @@ value str_item_gen_hashcons name arg = fun [
     let memo_items = List.map (HC.generate_memo_item loc arg rc) rc.HC.memo in
     let memo_items = List.map (Reloc.str_item (fun _ -> Ploc.dummy) 0) memo_items in
     let memo_items = HC.flatten_str_items memo_items in
-    let (module_items, bindings) = HC.separate_bindings memo_items in
-    <:str_item< declare
+    let full_memo_item =
+      if memo_items = [] then <:str_item< declare end >>
+      else
+        let (module_items, bindings) = HC.separate_bindings memo_items in
+        <:str_item< declare
+                      declare $list:module_items$ end ;
+                      value rec $list:bindings$ ;
+                    end >> in
+      <:str_item< declare
                   module $uid:rc.normal_module_name$ = struct
                   type $list:normal_tdl$ ;
                   end ;
@@ -738,8 +745,7 @@ value str_item_gen_hashcons name arg = fun [
                   value rec $list:prehash_bindings$ ;
                   declare $list:hashcons_modules @ hashcons_constructors$ end ;
                   value rec $list:hash_bindings$ ;
-                  declare $list:module_items$ end ;
-                  value rec $list:bindings$ ;
+                  $stri:full_memo_item$ ;
                   end ;
                 end>>
 | _ -> assert False ]
@@ -755,6 +761,7 @@ Pa_deriving.(Registry.add PI.{
     ("optional", <:expr< False >>)
   ; ("external_types", <:expr< () >>)
   ; ("skip_types", <:expr< [] >>)
+  ; ("memo", <:expr< () >>)
   ; ("pertype_customization", <:expr< () >>)
   ]
 ; alg_attributes = []

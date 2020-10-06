@@ -22,6 +22,6 @@ description = "pa_ppx_hashcons deriver"
   requires(byte) = "camlp5,pa_ppx.deriving_plugins.show.link,pa_ppx.params_runtime"
   archive(byte) = "pa_deriving_hashcons.cmo"
   )
-  requires = "camlp5,pa_ppx.deriving_plugins.show,pa_ppx.runtime,pa_ppx.params_runtime"
+  requires = "hashcons,camlp5,pa_ppx.deriving_plugins.show,pa_ppx.runtime,pa_ppx.params_runtime"
 
 EOF
