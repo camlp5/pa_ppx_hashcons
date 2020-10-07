@@ -120,11 +120,11 @@ value hashcons_module_name rc name =
   ]
 ;
 
-value hashcons_constructor_name rc name =
+value hashcons_constructor_names rc name =
   match List.assoc name rc.pertype_customization with [
-    {hashcons_constructor = Some n} -> n
-  | _ -> "make_"^name
-  | exception Not_found -> "make_"^name
+    {hashcons_constructor = Some n} -> ["make_"^name ; n]
+  | _ -> ["make_"^name]
+  | exception Not_found -> ["make_"^name]
   ]
 ;
 
@@ -650,11 +650,14 @@ value generate_hashcons_constructor ctxt rc (name, td) =
   let loc = loc_of_type_decl td in
   if uv td.tdPrm <> [] || List.mem name rc.skip_types then <:str_item< declare end >> else
   let modname = hashcons_module_name rc name in
-  let consname = hashcons_constructor_name rc name in
+  let consnames = hashcons_constructor_names rc name in
   let htname = name^"_ht" in
+  let bindings = List.map (fun n ->
+      (<:patt< $lid:n$ >>, <:expr< fun x -> $uid:modname$.hashcons $lid:htname$ x >>, <:vala< [] >>))
+      consnames in
   <:str_item< declare
                  value $lid:htname$ = $uid:modname$.create 10007 ;
-                 value $lid:consname$ x = $uid:modname$.hashcons $lid:htname$ x ;
+                 value $list:bindings$ ;
               end >>
 ;
 
