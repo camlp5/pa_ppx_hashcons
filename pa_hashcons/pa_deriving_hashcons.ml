@@ -78,7 +78,9 @@ value compute_memo type_decls raw_memo =
 ;
 
 type t = {
-  hashconsed_module_name : uident
+  optional : bool
+; plugin_name : string
+; hashconsed_module_name : uident
 ; normal_module_name : uident
 ; type_decls : list (string * MLast.type_decl) [@computed type_decls;]
 ; raw_memo : (alist lident ctyp) [@default [];] [@name memo;]

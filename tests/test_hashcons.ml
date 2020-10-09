@@ -69,8 +69,6 @@ type term =
                              | _ -> false)
                          ; prehash = (fun f x ->
                              Hashtbl.hash (Option.map f x))
-                         ; hash = (fun f x ->
-                             Hashtbl.hash (Option.map f x))
                          }
                        }
                      ; pertype_customization = {
