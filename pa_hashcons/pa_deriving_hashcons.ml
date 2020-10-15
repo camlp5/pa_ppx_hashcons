@@ -468,7 +468,7 @@ value to_patt loc (v, (_, _)) = <:patt< $lid:v$ >> ;
 value to_typatt loc (v, (_, ty)) = <:patt< ( $lid:v$ : $ty$ ) >> ;
 value to_ctyp (_, (_, ty)) = ty ;
 
-value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
+value generate_memo_item_with_deps loc ctxt rc (memo_fname, memo_tys) =
   match memo_tys with [
 
     Left l when not (List.exists fst l) ->
@@ -488,29 +488,37 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
           }]
       >> in
     let fun_body = Expr.abstract_over vars_patts body in
-    <:str_item<
+    let fun_type = 
+      let f = Ctyp.arrows_list loc (List.map to_ctyp vars_types) <:ctyp< 'a >> in
+      <:ctyp< ! 'a . $f$ -> $uid:mname$.t 'a -> $f$ >> in
+    (memo_fname,
+     (<:str_item<
       declare
         module $uid:mname$ = Hashtbl.Make(struct
           type t = $z$ ;
           value equal = $generate_eq_expression loc "eq" ctxt rc [] z$ ;
           value hash = $generate_hash_expression loc "hash" ctxt rc [] z$ ;
         end) ;
-      value $lid:memo_fname$ f ht =
+      value $lid:memo_fname$ = fun f ht ->
         $fun_body$
         ;
       end
-     >>
+     >>, []))
 
   | Left [(True, z)] ->
     let mname = Printf.sprintf "HT_%s" memo_fname in
-    <:str_item<
+    let memo_ftype =
+      let f = <:ctyp< $z$ -> 'a >> in
+      <:ctyp< ! 'a . $f$ -> $f$ >> in
+    (memo_fname,
+     (<:str_item<
       declare
         module $uid:mname$ = Ephemeron.K1.Make(struct
           type t = $z$ ;
           value equal = $generate_eq_expression loc "preeq" ctxt rc [] z$ ;
           value hash = $generate_hash_expression loc "prehash" ctxt rc [] z$ ;
         end) ;
-      value $lid:memo_fname$ f =
+      value $lid:memo_fname$ = fun f ->
         let ht = $uid:mname$.create 251 in
         fun ( x : $z$ ) ->
           try $uid:mname$.find ht x
@@ -521,11 +529,15 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
           }]
         ;
       end
-     >>
+     >>, []))
 
   | Left [(True, z0); (True, z1)] ->
     let mname = Printf.sprintf "HT_%s" memo_fname in
-    <:str_item<
+    let memo_ftype =
+      let f = <:ctyp< $z0$ -> $z1$ -> 'a >> in
+      <:ctyp< ! 'a . $f$ -> $f$ >> in
+    (memo_fname,
+     (<:str_item<
       declare
         module $uid:mname$ = Ephemeron.K2.Make
           (struct
@@ -538,7 +550,7 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
             value equal = $generate_eq_expression loc "preeq" ctxt rc [] z1$ ;
             value hash = $generate_hash_expression loc "prehash" ctxt rc [] z1$ ;
            end) ;
-      value $lid:memo_fname$ f =
+      value $lid:memo_fname$ = fun f ->
         let ht = $uid:mname$.create 251 in
         fun ( x : $z0$ ) ( y : $z1$ ) ->
           try $uid:mname$.find ht (x,y)
@@ -549,7 +561,7 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
           }]
         ;
       end
-     >>
+     >>, []))
 
   | Right l ->
     let vars_types = List.mapi (fun i x -> (Printf.sprintf "v_%d" i, x)) l in
@@ -580,11 +592,15 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
           <:expr< let ht = $hc_call$ in
                   $prim_memo_call$ >> in
 
-        <:str_item<
-          value $lid:memo_fname$ f =
+        let fun_type = Ctyp.arrows_list loc (List.map to_ctyp vars_types) <:ctyp< 'a >> in
+        let memo_ftype =  <:ctyp< ! 'a . $fun_type$ -> $fun_type$ >> in
+        let mono_fun_type = monomorphize_ctyp fun_type in
+        (memo_fname,
+         (<:str_item<
+          value $lid:memo_fname$ = fun (type a) -> fun ( f : $mono_fun_type$ ) ->
             let hc_f = $lid:hc_memo_name$ $hc_function_expr$ in
             $fun_body$
-        >>
+        >>, [hc_memo_name; prim_memo_name]))
       else match hc_args with [
         []|[_]|[_;_] -> assert False
         | [arg1; arg2 :: rest] ->
@@ -604,17 +620,44 @@ value generate_memo_item loc ctxt rc (memo_fname, memo_tys) =
         let second_f_function =
           Expr.abstract_over [<:patt< ($to_patt loc arg1$, $to_patt loc arg2$) >> :: List.map (to_patt loc) rest]
             f_call in
-        <:str_item<
+        (memo_fname,
+         (<:str_item<
           value $lid:memo_fname$ f =
             let first_f = $lid:first_memo_name$ (fun a1 a2 -> (a1, a2)) in
             let second_f = $lid:second_memo_name$
               $second_f_function$ in
             $fun_body$
-          >>
+          >>, [first_memo_name; second_memo_name]))
       ]
     }
 
   ]
+;
+
+
+value space = Fmt.(const string " ") ;
+
+value tsort_memos memos =
+  let open Tsort in
+  let unsorted = List.map fst memos in
+  let adj = List.map (fun (f, (_, deps)) -> (f,deps)) memos in
+  let sorted = Tsort.tsort  (fun v l -> [v::l]) adj [] in do {
+    if debug.val then
+      Fmt.(pf stderr "[tsort memo: <<%a>> -> <<%a>>]\n%!"
+             (list ~{sep=space} string) unsorted
+             (list ~{sep=space} string) sorted)
+    else () ;
+    sorted
+    |> List.map (fun n -> match List.assoc n memos with [ x -> [fst x] | exception Not_found -> [] ])
+    |> List.concat
+  }
+;
+
+
+value generate_memo_items loc arg rc =
+  let items = List.map (generate_memo_item_with_deps loc arg rc) rc.memo in
+  let items = tsort_memos items in
+  items
 ;
 
 value flatten_str_items sil =
@@ -728,17 +771,10 @@ value str_item_gen_hashcons name arg = fun [
     let hashcons_modules = List.map (HC.generate_hashcons_module arg rc) rc.HC.type_decls in
     let hash_bindings = List.concat (List.map (HC.generate_hash_bindings arg rc) rc.HC.type_decls) in
     let hashcons_constructors = List.map (HC.generate_hashcons_constructor arg rc) rc.HC.type_decls in
-    let memo_items = List.map (HC.generate_memo_item loc arg rc) rc.HC.memo in
+    let memo_items = HC.generate_memo_items loc arg rc in
     let memo_items = List.map (Reloc.str_item (fun _ -> Ploc.dummy) 0) memo_items in
     let memo_items = HC.flatten_str_items memo_items in
-    let full_memo_item =
-      if memo_items = [] then <:str_item< declare end >>
-      else
-        let (module_items, bindings) = HC.separate_bindings memo_items in
-        <:str_item< declare
-                      declare $list:module_items$ end ;
-                      value rec $list:bindings$ ;
-                    end >> in
+    let full_memo_item = <:str_item< declare $list:memo_items$ end >> in
       <:str_item< declare
                   module $uid:rc.normal_module_name$ = struct
                   type $list:normal_tdl$ ;
