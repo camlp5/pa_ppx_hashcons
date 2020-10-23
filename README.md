@@ -43,31 +43,37 @@ and compile with this package
 ocamlfind ocamlc -c -package hashcons,pa_ppx_hashcons -syntax camlp5o  -i test_hashcons.ml
 ```
 
-Almost all the examples are all with a single type, but the rewriter
-works just as well with multiple types in a recursive or non-recursive
-definition.
+Almost all the examples are all with a single type, but there is an
+example of the entire OCaml AST from Camlp5: which comprises a large
+number of mutually-recursive types.
 
 # Usage Details
 
 A description of the format of that `[@@deriving ...]` attribute:
 
-1. `module_name` is not optional, and is used to specify a module
-   which will be created and in which all new types and valu
+1. `hashcons_module_name` is not optional, and is used to specify a module
+   which will be created and in which all new types and value
    definitions will be placed.  This is necessary since the new types
    are very similar to the old ones, and we need to put them in a
    different structure.
+
+2. `normal_module_name` is not optional, and specifies a module which
+   will be created and filled with the normal version of the type
+   (using type-equations so it's equal to the original type).  This is
+   useful in the case where the types being hashconsed are imported via
+   `pa_ppx_import`.
    
-2. `hashcons_module` is an item-attribute of each type, and specifies
+3. `hashcons_module` is an item-attribute of each type, and specifies
    the module-name that will be generated for the hashtable of values
    of that type.  This is optional and can be omitted (and will be
    given a default value of `HC_<type-name>`).
    
-3. `hashcons_constructor` is an item-attribute of each type, and
+4. `hashcons_constructor` is an item-attribute of each type, and
    specifies the name to be used for the smart-constructor of each
    type, that does hash-consing.  It is optional, with default value
    the same as the type-name.
 
-4. `memo` is an optional option with an argument that is a
+5. `memo` is an optional option with an argument that is a
    record-value, with each field of the form
    ` <memo_function_name> = [%typ: <type-or-conjunction-of-types>] `.
    A memo-function of the specified name will be generated, e.g.
@@ -80,7 +86,7 @@ A description of the format of that `[@@deriving ...]` attribute:
    recursively conjunctions of the latter.  So for instance,
    `((term * term) * term) * term` is allowed.
 
-5. For complex memoizers, the PPX rewriter may produce error-messages like:
+6. For complex memoizers, the PPX rewriter may produce error-messages like:
 ```
 File "test_hashcons.ml", line 4, characters 1-1128:
 Failure: find_matching_memo: no match:
