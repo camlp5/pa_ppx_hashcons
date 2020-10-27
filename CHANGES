@@ -1,4 +1,12 @@
 
+pa_ppx_hashcons Version 0.07
+----------------------------
+
+* [27 Oct 2020] switch to using pa_ppx.deriving_plugins.params for
+  param-parsing
+
+* bugfixes
+
 pa_ppx_hashcons Version 0.01
 ----------------------------
 
