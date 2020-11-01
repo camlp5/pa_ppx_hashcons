@@ -11,10 +11,14 @@ print <<"EOF";
 version = "$Version::version"
 description = "pa_ppx_hashcons deriver"
 
+  package "runtime" (
+    requires = "hashcons"
+  )
+
   requires(toploop) = "camlp5,pa_ppx.deriving_plugins.show,pa_ppx.params_runtime"
   archive(toploop) = "pa_deriving_hashcons.cmo"
 
-    requires(syntax,preprocessor) = "camlp5,pa_ppx.deriving_plugins.show,pa_ppx.params_runtime"
+    requires(syntax,preprocessor) = "camlp5,pa_ppx.deriving_plugins.show,pa_ppx.params_runtime,pa_ppx_hashcons.runtime"
     archive(syntax,preprocessor,-native) = "pa_deriving_hashcons.cmo"
     archive(syntax,preprocessor,native) = "pa_deriving_hashcons.cmx"
 
@@ -23,4 +27,5 @@ description = "pa_ppx_hashcons deriver"
   archive(byte) = "pa_deriving_hashcons.cmo"
   )
 
+  requires = "pa_ppx_hashcons.runtime"
 EOF
