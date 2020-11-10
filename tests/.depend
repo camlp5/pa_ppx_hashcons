@@ -1,4 +1,4 @@
-test_hashcons.cmo lamh.cmo lam.cmo lam_hashcons.cmo lam_migrate.cmo test_inject.cmo: ../local-install/lib/pa_ppx_hashcons/META
+test_hashcons.cmo test_hashcons2.cmo lamh.cmo lam.cmo lam_hashcons.cmo lam_migrate.cmo test_inject.cmo: ../local-install/lib/pa_ppx_hashcons/META
 lam.cmo.ppo.cmo :
 lam.cmo.ppo.cmx :
 lam.cmo :
@@ -31,5 +31,9 @@ test_hashcons.cmo.ppo.cmo :
 test_hashcons.cmo.ppo.cmx :
 test_hashcons.cmo :
 test_hashcons.cmx :
+test_hashcons2.cmo.ppo.cmo :
+test_hashcons2.cmo.ppo.cmx :
+test_hashcons2.cmo :
+test_hashcons2.cmx :
 xx.cmo :
 xx.cmx :

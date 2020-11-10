@@ -20,10 +20,10 @@ OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
 OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
 
 TESTS= \
-	test_hashcons.byte lamh.byte lamh.opt test_inject.byte \
+	test_hashcons.byte test_hashcons2.byte lamh.byte lamh.opt test_inject.byte \
 
 ML=\
-	test_hashcons.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
+	test_hashcons.ml test_hashcons2.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
 
 
 CMO := $(ML:.ml=.cmo)
@@ -52,6 +52,14 @@ test_hashcons.byte: test_hashcons.cmo
 	-linkpkg -syntax camlp5o $^ -o $@
 
 test_hashcons.opt: test_hashcons.cmx
+	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
+test_hashcons2.byte: test_hashcons2.cmo
+	$(OCAMLFIND) ocamlc $(DEBUG) $(WARNERR) -package $(PACKAGES) \
+	-linkpkg -syntax camlp5o $^ -o $@
+
+test_hashcons2.opt: test_hashcons2.cmx
 	$(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
