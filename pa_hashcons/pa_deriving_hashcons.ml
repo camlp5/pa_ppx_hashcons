@@ -733,6 +733,7 @@ value make_twolevel_type_decl ctxt rc ~{with_manifest} ~{skip_hashcons} td =
         <:vala< (loc, n) >>
       ; tdDef = match td.tdDef with [
           <:ctyp< $_$ == $t$ >> when not with_manifest -> t
+        | <:ctyp< $_$ == $t$ >> when with_manifest -> td.tdDef
         | t when is_generative_type t && with_manifest ->
           Ploc.raise (loc_of_type_decl td)
             (Failure Fmt.(str "cannot generate requested \"normal\" type declaration b/c original type is not manifest: %s"
