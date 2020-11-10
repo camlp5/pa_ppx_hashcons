@@ -11,7 +11,6 @@ and term =
   | App of term * term
   | Foo of term_option
 [@@deriving hashcons { hashconsed_module_name = LAMH
-                     ; normal_module_name = LAM
                      ; memo = {
                          memo_term = [%typ: term]
                        ; memo_int = [%typ: int]
@@ -39,9 +38,6 @@ and term =
                      }]
 ;;
 
-let (_ : int LAM.option) = (Some 1) ;;
-(Ref 1) = (Ref 1) ;;
-
 let preeq_option f x y = match (x,y) with
     (None, None) -> true
   | (Some x, Some y) -> f x y
@@ -58,7 +54,6 @@ type term =
   | App of term * term
   | Foo of term Option.t
 [@@deriving hashcons { hashconsed_module_name = LAM2H
-                     ; normal_module_name = LAM2
                      ; memo = {
                          memo_term = [%typ: term]
                        ; memo_int_term = [%typ: int * term]

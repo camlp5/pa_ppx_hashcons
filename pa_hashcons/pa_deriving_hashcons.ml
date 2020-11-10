@@ -78,10 +78,10 @@ value compute_memo type_decls raw_memo =
 ;
 
 type t = {
-  optional : bool
+  optional : bool [@default False;]
 ; plugin_name : string
 ; hashconsed_module_name : uident
-; normal_module_name : uident
+; normal_module_name : option uident
 ; type_decls : list (string * MLast.type_decl) [@computed type_decls;]
 ; raw_memo : (alist lident ctyp) [@default [];] [@name memo;]
 ; memo : (alist lident  (choice (list (bool * MLast.ctyp)) (list (bool * MLast.ctyp)))) [@computed compute_memo type_decls raw_memo;]
@@ -709,7 +709,7 @@ value generate_hashcons_constructor ctxt rc (name, td) =
 end
 ;
 
-value make_twolevel_type_decl ctxt rc ~{preserve_manifest} ~{skip_hashcons} td =
+value make_twolevel_type_decl ctxt rc ~{with_manifest} ~{skip_hashcons} td =
   let loc = loc_of_type_decl td in
   let name = td.tdNam |> uv |> snd |> uv in
   let data_name = name^"_node" in
@@ -732,7 +732,11 @@ value make_twolevel_type_decl ctxt rc ~{preserve_manifest} ~{skip_hashcons} td =
         let n = <:vala< data_name >> in
         <:vala< (loc, n) >>
       ; tdDef = match td.tdDef with [
-          <:ctyp< $_$ == $t$ >> when not preserve_manifest -> t
+          <:ctyp< $_$ == $t$ >> when not with_manifest -> t
+        | t when is_generative_type t && with_manifest ->
+          Ploc.raise (loc_of_type_decl td)
+            (Failure Fmt.(str "cannot generate requested \"normal\" type declaration b/c original type is not manifest: %s"
+                            name))
         | t -> t
         ]
     }
@@ -742,15 +746,15 @@ value make_twolevel_type_decl ctxt rc ~{preserve_manifest} ~{skip_hashcons} td =
 
 value normal_type_decl ctxt rc td =
   let skip_hashcons = True in
-  let preserve_manifest = True in
-  make_twolevel_type_decl ctxt rc ~{preserve_manifest=preserve_manifest} ~{skip_hashcons=skip_hashcons} td
+  let with_manifest = True in
+  make_twolevel_type_decl ctxt rc ~{with_manifest=with_manifest} ~{skip_hashcons=skip_hashcons} td
 ;
 
 value hashconsed_type_decl ctxt rc td =
   let name = td.tdNam |> uv |> snd |> uv in
   let skip_hashcons = uv td.tdPrm <> [] || List.mem name rc.HC.skip_types in
-  let preserve_manifest = False in
-  make_twolevel_type_decl ctxt rc ~{preserve_manifest=preserve_manifest} ~{skip_hashcons=skip_hashcons} td
+  let with_manifest = False in
+  make_twolevel_type_decl ctxt rc ~{with_manifest=with_manifest} ~{skip_hashcons=skip_hashcons} td
 ;
 
 value str_item_gen_hashcons name arg = fun [
@@ -761,11 +765,19 @@ value str_item_gen_hashcons name arg = fun [
       |> List.map (hashconsed_type_decl arg rc)
       |> List.concat
       |> List.map HC.strip_hashcons_attributes in
-    let normal_tdl =
-      tdl
-      |> List.map (normal_type_decl arg rc)
-      |> List.concat
-      |> List.map HC.strip_hashcons_attributes in
+    let normal_module = match rc.normal_module_name with [
+      None -> <:str_item< declare end >>
+    | Some normname ->
+      let normal_tdl =
+        tdl
+        |> List.map (normal_type_decl arg rc)
+        |> List.concat
+        |> List.map HC.strip_hashcons_attributes in
+      <:str_item< module $uid:normname$ = struct
+                  type $list:normal_tdl$ ;
+                  end
+                  >>
+    ] in
     let preeq_bindings = List.concat (List.map (HC.generate_preeq_bindings arg rc) rc.HC.type_decls) in
     let prehash_bindings = List.concat (List.map (HC.generate_prehash_bindings arg rc) rc.HC.type_decls) in
     let hashcons_modules = List.map (HC.generate_hashcons_module arg rc) rc.HC.type_decls in
@@ -776,9 +788,7 @@ value str_item_gen_hashcons name arg = fun [
     let memo_items = HC.flatten_str_items memo_items in
     let full_memo_item = <:str_item< declare $list:memo_items$ end >> in
       <:str_item< declare
-                  module $uid:rc.normal_module_name$ = struct
-                  type $list:normal_tdl$ ;
-                  end ;
+                  $stri:normal_module$ ;
                   module $uid:rc.hashconsed_module_name$ = struct
                   open Hashcons ;
                   type $list:new_tdl$ ;
@@ -798,13 +808,7 @@ Pa_deriving.(Registry.add PI.{
 ; options = ["optional"
             ; "hashconsed_module_name"; "normal_module_name"; "memo"
             ; "external_types"; "skip_types"; "pertype_customization"]
-; default_options = let loc = Ploc.dummy in [
-    ("optional", <:expr< False >>)
-  ; ("external_types", <:expr< () >>)
-  ; ("skip_types", <:expr< [] >>)
-  ; ("memo", <:expr< () >>)
-  ; ("pertype_customization", <:expr< () >>)
-  ]
+; default_options = []
 ; alg_attributes = []
 ; expr_extensions = []
 ; ctyp_extensions = []

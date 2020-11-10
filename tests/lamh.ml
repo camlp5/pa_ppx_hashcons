@@ -7,7 +7,6 @@ type term =
   | Abs of term
   | App of term * term
 [@@deriving hashcons { hashconsed_module_name = LAMH
-                     ; normal_module_name = LAM
                      ; memo = {
                          memo = [%typ: term]
                        ; memo_int = [%typ: int]
