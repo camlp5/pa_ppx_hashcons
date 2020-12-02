@@ -25,6 +25,7 @@ description = "pa_ppx_hashcons deriver"
   package "link" (
   requires(byte) = "camlp5,pa_ppx.deriving_plugins.show.link,pa_ppx.params_runtime"
   archive(byte) = "pa_deriving_hashcons.cmo"
+  archive(native) = "pa_deriving_hashcons.cmx"
   )
 
   requires = "pa_ppx_hashcons.runtime"
