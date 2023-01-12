@@ -20,7 +20,10 @@ OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
 OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
 
 TESTS= \
-	test_hashcons.byte test_hashcons2.byte lamh.byte lamh.opt test_inject.byte \
+	test_hashcons.byte test_hashcons.opt \
+	test_hashcons2.byte test_hashcons2.opt \
+	lamh.byte lamh.opt \
+	test_inject.byte test_inject.opt \
 
 ML=\
 	test_hashcons.ml test_hashcons2.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
