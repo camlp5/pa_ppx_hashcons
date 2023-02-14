@@ -50,7 +50,7 @@ $(CMO) $(CMI) $(CMX): $(EXTERNAL)
 
 depend::
 	echo "$(CMO) $(CMI) $(CMX): $(EXTERNAL)" > .depend.NEW
-	$(YAWRAP) $(OCAMLFIND) ocamldep $(DEBUG) -package $(PACKAGES) -- $(ML) $(TOOLSML) $(MLI) >> .depend.NEW \
+	$(LAUNCH) $(YAWRAP) $(OCAMLFIND) ocamldep $(DEBUG) -package $(PACKAGES) -- $(ML) $(TOOLSML) $(MLI) >> .depend.NEW \
 		&& mv .depend.NEW .depend
 
 -include .depend

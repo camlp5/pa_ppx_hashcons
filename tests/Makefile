@@ -76,7 +76,7 @@ EXTERNAL := $(shell $(LAUNCH) $(OCAMLFIND) query -predicates byte -format '%m' $
 
 depend::
 	echo "$(CMO) $(CMI) $(CMX): $(EXTERNAL)" > .depend.NEW
-	$(YAWRAP) $(LAUNCH) $(OCAMLFIND) ocamldep $(OCAMLCFLAGS) -package $(PACKAGES) -- *.ml \
+	$(LAUNCH) $(YAWRAP) $(OCAMLFIND) ocamldep $(OCAMLCFLAGS) -package $(PACKAGES) -- *.ml \
 	>> .depend.NEW
 	mv .depend.NEW .depend
 
