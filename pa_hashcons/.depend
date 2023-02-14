@@ -1,3 +1,5 @@
 pa_deriving_hashcons.cmo pa_deriving_hashcons.cmi pa_deriving_hashcons.cmx: 
 pa_deriving_hashcons.cmo :
 pa_deriving_hashcons.cmx :
+mk_meta.cmo :
+mk_meta.cmx :
