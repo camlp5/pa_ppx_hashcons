@@ -3,16 +3,18 @@
 
 WD=$(shell pwd)
 TOP=..
-include $(TOP)/config/Makefile
+include $(TOP)/config/Makefile.sub
 
 DESTDIR=
-RM=rm
 
 PACKAGES := $(PACKAGES),oUnit,fmt,pcre,rresult,compiler-libs.common,sexplib0,uint,pa_ppx.utils,pa_ppx.import
 PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons,pa_ppx_migrate
 export IMPORT_OCAMLCFLAGS += -ppopt -pa_passthru-debug 
 export IMPORT_OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
 export IMPORT_OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
+
+ALLSRC=$(shell ls *.ml)
+ALLPACKAGES=$(PACKAGES)
 
 TESTS= \
 	test_hashcons.byte \
@@ -71,13 +73,3 @@ test_inject.opt: lam.cmx lam_hashcons.cmx lam_migrate.cmx
 
 clean::
 	rm -f  *.ppo.*
-
-EXTERNAL := $(shell $(LAUNCH) $(OCAMLFIND) query -predicates byte -format '%m' $(PACKAGES) | grep local-install)
-
-depend::
-	echo "$(CMO) $(CMI) $(CMX): $(EXTERNAL)" > .depend.NEW
-	$(LAUNCH) $(YAWRAP) $(OCAMLFIND) ocamldep $(OCAMLCFLAGS) -package $(PACKAGES) -- *.ml \
-	>> .depend.NEW
-	mv .depend.NEW .depend
-
--include .depend
