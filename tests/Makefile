@@ -25,13 +25,6 @@ TESTS= \
 ML=\
 	test_hashcons.ml test_hashcons2.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
 
-
-CMO := $(ML:.ml=.cmo)
-CMI := $(ML:.ml=.cmi)
-CMX := $(ML:.ml=.cmx)
-CMT := $(ML:.ml=.cmt)
-CMTI := $(MLI:.mli=.cmti)
-
 all: $(TESTS) $(TESTS:.byte=.opt)
 
 test: $(TESTS:.byte=)

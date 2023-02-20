@@ -8,6 +8,7 @@ include $(TOP)/config/Makefile.sub
 DESTDIR=
 
 PACKAGES := $(PACKAGES),pa_ppx.deriving,pa_ppx.deriving_plugins.show,pa_ppx.base,pa_ppx.unmatched_vala,pa_ppx.deriving_plugins.params
+TARGET_PACKAGE=pa_ppx_hashcons
 
 ML=\
 	pa_deriving_hashcons.ml \
@@ -22,9 +23,8 @@ doc: $(CMT) $(CMTI)
 
 KITS=$(CMO)
 
-install:: META
-	mkdir -p $(DESTDIR)/lib
-	$(NOT_OCAMLFIND) reinstall-if-diff pa_ppx_hashcons -destdir $(DESTDIR)/lib META $(CMO) $(CMX) $(MLI:.mli=.cmi) $(KITS:.cmo=.o) $(wildcard *.cmt*)
+TARGET_INSTALL_FILES=$(CMO) $(CMI) $(CMX)
+install:: default_install
 
 local-install::
 	$(MAKE) DESTDIR=$(WD)/$(TOP)/local-install/ install
