@@ -21,8 +21,6 @@ all: $(CMO) $(CMX) local-install
 
 doc: $(CMT) $(CMTI)
 
-KITS=$(CMO)
-
 TARGET_INSTALL_FILES=$(FILES_TARGET_INSTALL_FILES)
 install:: default_install
 
