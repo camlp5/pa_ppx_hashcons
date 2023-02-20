@@ -23,7 +23,7 @@ doc: $(CMT) $(CMTI)
 
 KITS=$(CMO)
 
-TARGET_INSTALL_FILES=$(CMO) $(CMI) $(CMX)
+TARGET_INSTALL_FILES=$(FILES_TARGET_INSTALL_FILES)
 install:: default_install
 
 local-install::
