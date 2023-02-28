@@ -1,4 +1,4 @@
-(** -syntax camlp5o *)
+(**pp -syntax camlp5o *)
 
 (* programme de test de réductions massives de lambda-termes *)
 (* version AVEC hash-consing *)
