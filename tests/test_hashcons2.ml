@@ -1,4 +1,4 @@
-(**pp -syntax camlp5o $(IMPORT_OCAMLCFLAGS) *)
+(**pp -syntax camlp5o *)
 (* test_hashcons.ml *)
 
 let preeq_option f x y = match (x,y) with

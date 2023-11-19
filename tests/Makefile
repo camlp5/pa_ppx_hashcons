@@ -9,9 +9,6 @@ DESTDIR=
 
 PACKAGES := $(PACKAGES),oUnit,fmt,rresult,compiler-libs.common,sexplib0,uint,pa_ppx.utils,pa_ppx.import
 PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons,pa_ppx_migrate
-export IMPORT_OCAMLCFLAGS += -ppopt -pa_passthru-debug 
-export IMPORT_OCAMLCFLAGS += -ppopt -pa_import-package -ppopt camlp5
-export IMPORT_OCAMLCFLAGS += -ppopt -pa_import-I -ppopt .
 
 ALLSRC=$(shell ls *.ml)
 ALLPACKAGES=$(PACKAGES)

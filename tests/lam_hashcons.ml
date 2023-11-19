@@ -1,4 +1,4 @@
-(**pp -syntax camlp5o $(IMPORT_OCAMLCFLAGS) *)
+(**pp -syntax camlp5o *)
 (* hCLam.ml *)
 
 [%%import: Lam.term]
