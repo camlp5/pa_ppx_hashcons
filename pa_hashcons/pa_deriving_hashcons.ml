@@ -49,12 +49,12 @@ type pertype_customization_t = {
 value extract_memo_type_list type_decls t =
   let rec rec_memo_type = fun [
     <:ctyp< $lid:lid$ >> when List.mem_assoc lid type_decls -> True
-  | <:ctyp< ( $list:l$ ) >> -> List.for_all rec_memo_type l
+  | <:ctyp< ( $list:l$ ) >> -> List.for_all rec_memo_type (List.map snd l)
   | _ -> False
   ] in
   let rec prim_type = fun [
     z when List.mem (canon_ctyp z) builtin_types -> True
-  | <:ctyp< ( $list:l$ ) >> when List.for_all prim_type l -> True
+  | <:ctyp< ( $list:l$ ) >> when List.for_all prim_type (List.map snd l) -> True
   | _ -> False
   ] in
   let memoizable t = rec_memo_type t || prim_type t in
@@ -63,8 +63,8 @@ value extract_memo_type_list type_decls t =
   | <:ctyp< $lid:_$ >> as z when rec_memo_type z -> Left [(True, z)]
   | <:ctyp< ( $t1$ * $t2$ ) >> when rec_memo_type t1 && rec_memo_type t2 -> Left [(True, t1);(True, t2)]
 
-  | <:ctyp< ( $list:l$ ) >> when List.for_all memoizable l ->
-    Right (List.map (fun z -> (rec_memo_type z, z)) l)
+  | <:ctyp< ( $list:l$ ) >> when List.for_all memoizable (List.map snd l) ->
+    Right (List.map (fun z -> (rec_memo_type z, z)) (List.map snd l))
 
   | _ -> Ploc.raise (loc_of_ctyp t)
            (Failure Fmt.(str "extract_memo_type_list: not memoizable type:@ %a"
@@ -165,11 +165,21 @@ value generate_eq_expression loc eq_prefix ctxt rc rho ty =
     <:expr< $lid:List.assoc id rho$ >>
   | <:ctyp:< ( $list:l$ ) >> ->
     let xpatt_ypatt_subeqs =
-      List.mapi (fun i ty ->
+      List.mapi (fun i (lab, ty) ->
           let x = Printf.sprintf "x_%d" i in
           let y = Printf.sprintf "y_%d" i in
-          (<:patt< $lid:x$ >>,
-           <:patt< $lid:y$ >>,
+          let x_patt =
+            match uv lab with [
+                None -> <:patt< $lid:x$ >>
+              | Some <:vala< lab >> -> <:patt< ~{$lid:lab$ = $lid:x$} >>
+              ] in
+          let y_patt =
+            match uv lab with [
+                None -> <:patt< $lid:y$ >>
+              | Some <:vala< lab >> -> <:patt< ~{$lid:lab$ = $lid:y$} >>
+              ] in
+          (x_patt,
+           y_patt,
            <:expr< $prerec ty$ $lid:x$ $lid:y$ >>)) l in
     let xpatt (x, _, _) = x in
     let ypatt (_, x, _) = x in
@@ -316,9 +326,14 @@ value generate_hash_expression loc hash_prefix ctxt rc rho ty =
     <:expr< $lid:List.assoc id rho$ >>
   | <:ctyp:< ( $list:l$ ) >> ->
     let xpatt_subhashs =
-      List.mapi (fun i ty ->
+      List.mapi (fun i (lab, ty) ->
           let x = Printf.sprintf "x_%d" i in
-          (<:patt< $lid:x$ >>,
+          let x_patt =
+            match uv lab with [
+                None -> <:patt< $lid:x$ >>
+              | Some <:vala< lab >> -> <:patt< ~{$lid:lab$ = $lid:x$} >>
+              ] in
+          (x_patt,
            <:expr< $prerec ty$ $lid:x$ >>)) l in
     let xpatt (x, _) = x in
     let subhash (_, x) = x in
@@ -421,12 +436,7 @@ value generate_hash_bindings ctxt rc (name, td) =
   [node_binding; it_binding]
 ;
 
-value ctyp_make_tuple loc l =
-  match l with [
-    [] -> Ploc.raise loc (Failure "ctyp_make_tuple: invalid empty-list arg")
-  | [t] -> t
-  | l -> <:ctyp< ( $list:l$ ) >>
-  ]
+value ctyp_make_tuple loc l = Ctyp.tuple loc l
 ;
 
 value expr_make_tuple loc l =
@@ -458,7 +468,7 @@ value find_matching_memo loc rc l =
     ]) rc.memo with [
     Some n -> n
   | None ->
-    let ty = <:ctyp< ( $list:List.map snd l$ ) >> in
+    let ty = Ctyp.tuple loc (List.map snd l) in
     Ploc.raise loc (Failure Fmt.(str "find_matching_memo: no match:@ Please declare a memoizer of type <<%s>>@."
                                    (Eprinter.apply Pcaml.pr_ctyp Pprintf.empty_pc ty)))
   ]
@@ -606,7 +616,7 @@ value generate_memo_item_with_deps loc ctxt rc (memo_fname, memo_tys) =
         []|[_]|[_;_] -> assert False
         | [arg1; arg2 :: rest] ->
         let first_memo_name = find_matching_memo loc rc (List.map snd [arg1;arg2]) in
-        let pairty = <:ctyp< ( $list:[to_ctyp arg1;to_ctyp arg2]$ ) >> in
+        let pairty = <:ctyp< ( $to_ctyp arg1$ * $to_ctyp arg2$ ) >> in
         let second_memo_name = find_matching_memo loc rc [(True, pairty) :: List.map snd rest] in
 
         let second_f_call =

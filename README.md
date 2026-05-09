@@ -2,7 +2,7 @@ A PPX Rewriter for Hashconsing
 
 ### Version
 
-This is ``pa_ppx_hashcons`` (alpha) version 0.10.
+This is ``pa_ppx_hashcons`` version 8.04.01.
 
 # Overview
 
