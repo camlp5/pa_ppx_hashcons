@@ -5,4 +5,4 @@
 type term =
     Ref of int
   | Abs of term
-  | App of term * term
+  | App of (f:term * term)
