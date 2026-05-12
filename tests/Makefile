@@ -61,5 +61,7 @@ test_inject.opt: lam.cmx lam_hashcons.cmx lam_migrate.cmx
 	$(LAUNCH) $(OCAMLFIND) ocamlopt $(DEBUG) $(WARNERR) -package $(PACKAGES) \
 	-linkpkg -syntax camlp5o $^ -o $@
 
+.SECONDARY: lam.ml
+
 clean::
-	rm -f  *.ppo.*
+	rm -f  *.ppo.* lam.ml
