@@ -1,9 +1,9 @@
-pa_ppx_hashcons Version 8.04.01
+pa_ppx_hashcons Version 8.05.01
 -------------------------------
 
 * [09 May 2026]
 
-  * update source to be compat with new camlp5 8.04.01, OCaml 5.4.0
+  * update source to be compat with new camlp5 8.05.01, OCaml 5.4.0
 
     OCaml 5.4 introduces labeled-tuples.
 
