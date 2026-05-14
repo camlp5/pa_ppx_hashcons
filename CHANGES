@@ -10,6 +10,8 @@ pa_ppx_hashcons Version 8.04.01
   * Change version-numbering of pa_ppx_hashcons so it matches that of
     Camlp5.
 
+  * sync config/Makefile*
+
 pa_ppx_hashcons Version 0.12
 -------------------
 
