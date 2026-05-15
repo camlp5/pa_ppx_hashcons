@@ -10,7 +10,7 @@ DESTDIR=
 PACKAGES := $(PACKAGES),oUnit,fmt,rresult,compiler-libs.common,sexplib0,uint,pa_ppx.utils,pa_ppx.import
 PACKAGES := $(PACKAGES),pa_ppx_hashcons,hashcons,pa_ppx_migrate
 
-ALLSRC=$(shell ls *.ml)
+ALLSRC=$(ML)
 ALLPACKAGES=$(PACKAGES)
 
 TESTS= \
@@ -20,7 +20,7 @@ TESTS= \
 	test_inject.byte \
 
 ML=\
-	test_hashcons.ml test_hashcons2.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml test_inject.ml
+	test_hashcons.ml test_hashcons2.ml lamh.ml lam.ml lam_hashcons.ml lam_migrate.ml
 
 all: $(TESTS) $(TESTS:.byte=.opt)
 
