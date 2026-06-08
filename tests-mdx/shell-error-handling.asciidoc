@@ -1,0 +1,44 @@
+Test Shell Error Handling
+=========================
+:toc:
+:toc-placement: preamble
+
+```sh
+$ env TOP=.. ocamlfind camlp5-buildscripts/LAUNCH  -- ocamlfind camlp5-buildscripts/ya-wrap-ocamlfind ocamlfind ocamlc -g  -package fmt,unix,camlp5 -c fixtures/ok1.ml
+'ocamlfind' 'ocamlc' '-g' '-package' 'fmt,unix,camlp5' '-c' -syntax camlp5o -package pa_ppx_hashcons  fixtures/ok1.ml
+```
+
+```sh
+$ env TOP=.. ocamlfind camlp5-buildscripts/LAUNCH  -- ocamlfind camlp5-buildscripts/ya-wrap-ocamlfind ocamlfind ocamlc -g  -package fmt,unix,camlp5 -c fixtures/fail2.ml
+'ocamlfind' 'ocamlc' '-g' '-package' 'fmt,unix,camlp5' '-c' -syntax camlp5o -package pa_ppx_hashcons  fixtures/fail2.ml
+File "fixtures/fail2.ml", line 3, characters 6-7:
+Failure: cannot generate requested "normal" type declaration b/c original type is not manifest: t
+File "fixtures/fail2.ml", line 1:
+Error: Error while running external preprocessor
+
+[2]
+```
+
+```sh
+$ env TOP=.. ocamlfind camlp5-buildscripts/LAUNCH  -- ocamlfind camlp5-buildscripts/ya-wrap-ocamlfind ocamlfind ocamlc -g  -package fmt,unix,camlp5 -c fixtures/fail3.ml
+'ocamlfind' 'ocamlc' '-g' '-package' 'fmt,unix,camlp5' '-c' -syntax camlp5o -package pa_ppx_hashcons  fixtures/fail3.ml
+File "fixtures/fail3.ml", line 3, characters 6-7:
+Failure: generate_eq_expression:
+unhandled type int -> int
+File "fixtures/fail3.ml", line 1:
+Error: Error while running external preprocessor
+
+[2]
+```
+
+```sh
+$ env TOP=.. ocamlfind camlp5-buildscripts/LAUNCH  -- ocamlfind camlp5-buildscripts/ya-wrap-ocamlfind ocamlfind ocamlc -g  -package fmt,unix,camlp5 -c fixtures/fail4.ml
+'ocamlfind' 'ocamlc' '-g' '-package' 'fmt,unix,camlp5' '-c' -syntax camlp5o -package pa_ppx_hashcons  fixtures/fail4.ml
+File "fixtures/fail4.ml", line 7, characters 44-54:
+Failure: extract_memo_type_list: not memoizable type:
+int option
+File "fixtures/fail4.ml", line 1:
+Error: Error while running external preprocessor
+
+[2]
+```

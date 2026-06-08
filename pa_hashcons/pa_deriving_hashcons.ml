@@ -1,4 +1,4 @@
-(**pp -syntax camlp5r *)
+(**pp -syntax camlp5r -package camlp5.parser_quotations *)
 (* pa_deriving_migrate.ml,v *)
 (* Copyright (c) INRIA 2007-2017 *)
 
@@ -66,9 +66,9 @@ value extract_memo_type_list type_decls t =
   | <:ctyp< ( $list:l$ ) >> when List.for_all memoizable (List.map snd l) ->
     Right (List.map (fun z -> (rec_memo_type z, z)) (List.map snd l))
 
-  | _ -> Ploc.raise (loc_of_ctyp t)
-           (Failure Fmt.(str "extract_memo_type_list: not memoizable type:@ %a"
-                           Pp_MLast.pp_ctyp t))
+  | _ -> Fmt.(raise_failwithf (loc_of_ctyp t)
+                "extract_memo_type_list: not memoizable type:@ %a"
+                pp_ctyp t)
   ]
 ;
 
@@ -227,8 +227,8 @@ value generate_eq_expression loc eq_prefix ctxt rc rho ty =
     ] in
     <:expr< (fun x y -> match (x,y) with [ $list:case_branches$ ] ) >>
 
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_eq_expression:@ unhandled type %a"
-                                        Pp_MLast.pp_ctyp z))
+  | z -> Fmt.(raise_failwithf loc "generate_eq_expression:@ unhandled type %a"
+                pp_ctyp z)
 
   ] in
   prerec ty
@@ -238,8 +238,7 @@ value make_rho loc name td =
   let tyvars = td.tdPrm |> uv in
   List.mapi (fun i -> fun [
       (<:vala< None >>, _) ->
-      Ploc.raise loc (Failure Fmt.(str "make_rho: %s: formal type-vars must all be named"
-                                     name))
+      Fmt.(raise_failwithf loc "make_rho: %s: formal type-vars must all be named" name)
     | (<:vala< Some id >>, _) -> (id, Printf.sprintf "sub_%d" i)
     ]) tyvars
 ;
@@ -368,8 +367,8 @@ value generate_hash_expression loc hash_prefix ctxt rc rho ty =
         ]) l in
     <:expr< fun [ $list:case_branches$ ] >>
 
-  | z -> Ploc.raise loc (Failure Fmt.(str "generate_hash_expression:@ unhandled type %a"
-                                        Pp_MLast.pp_ctyp z))
+  | z -> Fmt.(raise_failwithf loc "generate_hash_expression:@ unhandled type %a"
+                pp_ctyp z)
 
   ] in
   prerec ty
@@ -441,7 +440,7 @@ value ctyp_make_tuple loc l = Ctyp.tuple loc l
 
 value expr_make_tuple loc l =
   match l with [
-    [] -> Ploc.raise loc (Failure "expr_make_tuple: invalid empty-list arg")
+    [] -> Fmt.(raise_failwith loc "expr_make_tuple: invalid empty-list arg")
   | [t] -> t
   | l -> <:expr< ( $list:l$ ) >>
   ]
@@ -449,7 +448,7 @@ value expr_make_tuple loc l =
 
 value patt_make_tuple loc l =
   match l with [
-    [] -> Ploc.raise loc (Failure "patt_make_tuple: invalid empty-list arg")
+    [] -> Fmt.(raise_failwith loc "patt_make_tuple: invalid empty-list arg")
   | [t] -> t
   | l -> <:patt< ( $list:l$ ) >>
   ]
@@ -469,8 +468,8 @@ value find_matching_memo loc rc l =
     Some n -> n
   | None ->
     let ty = Ctyp.tuple loc (List.map snd l) in
-    Ploc.raise loc (Failure Fmt.(str "find_matching_memo: no match:@ Please declare a memoizer of type <<%s>>@."
-                                   (Eprinter.apply Pcaml.pr_ctyp Pprintf.empty_pc ty)))
+    Fmt.(raise_failwithf loc "find_matching_memo: no match:@ Please declare a memoizer of type <<%a>>@."
+           pp_ctyp ty)
   ]
 ;
 
@@ -728,8 +727,8 @@ value make_twolevel_type_decl ctxt rc ~{with_manifest} ~{skip_hashcons} td =
     let tyvars = td.tdPrm |> uv in
     List.map (fun [
         (<:vala< None >>, _) ->
-        Ploc.raise loc (Failure Fmt.(str "hashconsed_type_decl: %s: formal type-vars must all be named"
-                                       name))
+        Fmt.(raise_failwithf loc "hashconsed_type_decl: %s: formal type-vars must all be named"
+               name)
       | (<:vala< Some id >>, _) -> <:ctyp< ' $id$ >>
       ]) tyvars in
   let hc_tdDef =
@@ -746,9 +745,8 @@ value make_twolevel_type_decl ctxt rc ~{with_manifest} ~{skip_hashcons} td =
           <:ctyp< $_$ == $t$ >> when not with_manifest -> t
         | <:ctyp< $_$ == $t$ >> when with_manifest -> td.tdDef
         | t when is_generative_type t && with_manifest ->
-          Ploc.raise (loc_of_type_decl td)
-            (Failure Fmt.(str "cannot generate requested \"normal\" type declaration b/c original type is not manifest: %s"
-                            name))
+          Fmt.(raise_failwithf (loc_of_type_decl td) "cannot generate requested \"normal\" type declaration b/c original type is not manifest: %s"
+                 name)
         | t -> t
         ]
     }

@@ -9,7 +9,7 @@ DESTDIR=
 
 SYSDIRS= pa_hashcons
 
-TESTDIRS= tests
+TESTDIRS= tests tests-mdx
 
 PACKAGES := pa_ppx.utils,pa_ppx.base,pa_ppx.import,pa_ppx.deriving
 

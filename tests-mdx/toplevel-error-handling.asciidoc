@@ -1,0 +1,103 @@
+Test OCaml Toplevel Error Handling
+==================================
+:toc:
+:toc-placement: preamble
+
+```ocaml
+# #directory ".";;
+# #use "topfind.camlp5";;
+- : unit = ()
+Findlib has been successfully loaded. Additional directives:
+  #require "package";;      to load a package
+  #list;;                   to list the available packages
+  #camlp4o;;                to load camlp4 (standard syntax)
+  #camlp4r;;                to load camlp4 (revised syntax)
+  #predicates "p,q,...";;   to set these predicates
+  Topfind.reset();;         to force that packages will be reloaded
+  #thread;;                 to enable threads
+
+- : unit = ()
+Additional Camlp5 directives:
+  #camlp5o;;                to load camlp5 (standard syntax)
+  #camlp5r;;                to load camlp5 (revised syntax)
+
+- : unit = ()
+# #camlp5o ;;
+# #require "pa_ppx.runtime" ;;
+# #require "pa_ppx.runtime_fat" ;;
+# Pa_ppx_runtime.Exceptions.Ploc.pp_loc_verbose := true ;;
+- : unit = ()
+# Pa_ppx_runtime_fat.Exceptions.Ploc.pp_loc_verbose := true ;;
+- : unit = ()
+# #install_printer Pa_ppx_runtime.Exceptions.Ploc.pp;;
+```
+
+```ocaml
+# let exc_converter = function
+    Exit as exc ->
+    let s = Printexc.to_string exc in
+    Some (Location.error s)
+  | _ -> None
+val exc_converter : exn -> Location.report option = <fun>
+# Location.register_error_of_exn exc_converter ;;
+- : unit = ()
+```
+
+```ocaml
+# #require "pa_ppx_hashcons" ;;
+# #directory "../tests";;
+```
+
+```ocaml
+# #use "fixtures/ok1.ml";;
+val preeq_list : ('a -> 'b -> bool) -> 'a list -> 'b list -> bool = <fun>
+val prehash_list : ('a -> 'b) -> 'a list -> int = <fun>
+val hash_list : ('a -> 'b) -> 'a list -> int = <fun>
+type t = A of int * int | B of t list
+module ASTH :
+  sig
+    type t_node = A of int * int | B of t list
+    and t = t_node Hashcons.hash_consed
+    val preeq_t_node : t_node -> t_node -> bool
+    val preeq_t : t -> t -> bool
+    val prehash_t_node : t_node -> int
+    val prehash_t : t -> int
+    module HC_t :
+      sig
+        type key = t_node
+        type t
+        val create : int -> t
+        val clear : t -> unit
+        val hashcons : t -> key -> key Hashcons.hash_consed
+        val iter : (key Hashcons.hash_consed -> unit) -> t -> unit
+        val stats : t -> int * int * int * int * int * int
+      end
+    val t_ht : HC_t.t
+    val make_t : t_node -> t_node Hashcons.hash_consed
+    val hash_t_node : t_node -> int
+    val hash_t : t -> int
+  end
+```
+
+```ocaml
+# #use "fixtures/fail2.ml";;
+File "./fixtures/fail2.ml", line 3, characters 5-6:
+Failure: cannot generate requested "normal" type declaration b/c original type is not manifest: t
+[125]
+```
+
+```ocaml
+# #use "fixtures/fail3.ml";;
+File "./fixtures/fail3.ml", line 3, characters 5-6:
+Failure: generate_eq_expression:
+unhandled type int -> int
+[125]
+```
+
+```ocaml
+# #use "fixtures/fail4.ml";;
+File "./fixtures/fail4.ml", line 7, characters 43-53:
+Failure: extract_memo_type_list: not memoizable type:
+int option
+[125]
+```
