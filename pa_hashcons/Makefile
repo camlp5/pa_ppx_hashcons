@@ -14,7 +14,7 @@ ML=\
 	pa_deriving_hashcons.ml \
 
 TOOLSML = mk_meta.ml
-allsrc=$(ML) $(TOOLSML)
+ALLSRC=$(ML) $(TOOLSML)
 ALLPACKAGES=$(PACKAGES)
 
 all: $(CMO) $(CMX) local-install
